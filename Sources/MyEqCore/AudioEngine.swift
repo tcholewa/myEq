@@ -2,7 +2,19 @@ import CDSP
 import CoreAudio
 import Foundation
 
+public struct AudioOutput: Equatable, Identifiable {
+  public let id: String
+  public let name: String
+}
+
+public enum DriverStatus: String {
+  case missing, restartRequired, ready
+}
+
 public struct EngineSnapshot: Equatable {
+  public var outputs: [AudioOutput] = []
+  public var selectedOutputUID: String?
+  public var driverStatus: DriverStatus = .missing
   public var state: AudioEngineState = .bypassed
   public var outputName = "System output"
   public var sampleRate: Double = 48000
@@ -12,11 +24,14 @@ public struct EngineSnapshot: Equatable {
 
 public final class AudioEngine {
   public var onUpdate: ((EngineSnapshot) -> Void)?
+  public var onBypass: (() -> Void)?
+  public var onSelectedOutput: ((String) -> Void)?
   public var onMeter: ((OutputLevels) -> Void)?
   private let queue = DispatchQueue(label: "com.tc.myEq.audio-control", qos: .userInitiated)
   private var timer: DispatchSourceTimer?
   private var meterMonitor: OutputMeterMonitor?
-  private var session: TapSession?
+  private var session: VirtualOutputSession?
+  private var preferredOutputUID: String?
   private var route: OutputRoute?
   private var preset = EQPreset.flat
   private var applied: EQPreset?
@@ -26,8 +41,6 @@ public final class AudioEngine {
   private var closing = false
   private var snapshot = EngineSnapshot()
   private var lastPublished: EngineSnapshot?
-  private var lastCallback: UInt64 = 0
-  private var callbackChangedAt = Date()
   private var listeners: [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
 
   public init() {
@@ -61,11 +74,12 @@ public final class AudioEngine {
     timer.resume()
     self.timer = timer
   }
-  public func configure(preset: EQPreset, enabled: Bool) {
+  public func configure(preset: EQPreset, enabled: Bool, outputUID: String? = nil) {
     guard preset.isValid else { return }
     queue.async { [weak self] in
       guard let self, !self.closing else { return }
-      let toggled = self.enabled != enabled
+      let toggled = self.enabled != enabled || self.preferredOutputUID != outputUID
+      self.preferredOutputUID = outputUID
       if toggled { self.blocked = false }
       self.preset = preset
       self.enabled = enabled
@@ -133,7 +147,42 @@ public final class AudioEngine {
     guard !closing else { return }
     defer { publish() }
     do {
-      let current = try OutputRoute.current()
+      let all = OutputRoute.all()
+      snapshot.outputs = all.filter { $0.channels.reduce(0, +) == 2 }.map {
+        AudioOutput(id: $0.uid, name: $0.name)
+      }
+      let ids = (try? HAL.ids(HAL.system, kAudioHardwarePropertyDevices)) ?? []
+      let driverFound = ids.contains {
+        (try? HAL.string($0, kAudioDevicePropertyDeviceUID)) == "com.tc.myEq.output"
+      }
+      snapshot.driverStatus =
+        driverFound
+        ? .ready
+        : FileManager.default.fileExists(atPath: "/Library/Audio/Plug-Ins/HAL/myEq.driver")
+          ? .restartRequired : .missing
+      var manuallyBypassed = false
+      if let session {
+        let health = try session.heartbeat()
+        if health == 2 {
+          enabled = false
+          stop()
+          preferredOutputUID = nil
+          manuallyBypassed = true
+        } else if health == 3 {
+          stop()
+          preferredOutputUID = nil
+        }
+      }
+      let system = try OutputRoute.current()
+      let selected = all.first { $0.uid == preferredOutputUID }
+      let current = selected ?? (system?.physical == true ? system : nil) ?? all.first
+      if let current, preferredOutputUID != current.uid {
+        preferredOutputUID = current.uid
+        let uid = current.uid
+        DispatchQueue.main.async { [weak self] in self?.onSelectedOutput?(uid) }
+      }
+      if manuallyBypassed { DispatchQueue.main.async { [weak self] in self?.onBypass?() } }
+      snapshot.selectedOutputUID = current?.uid
       if route != current {
         stop()
         route = current
@@ -144,6 +193,14 @@ public final class AudioEngine {
       if !enabled {
         stop()
         snapshot.state = .bypassed
+        return
+      }
+      guard snapshot.driverStatus == .ready else {
+        stop()
+        snapshot.state = .suspended(
+          snapshot.driverStatus == .missing
+            ? "Install myEq.pkg to enable the virtual output driver and audio helpers."
+            : "The driver is installed but not loaded. Restart your Mac, then Retry.")
         return
       }
       if sleeping {
@@ -168,37 +225,21 @@ public final class AudioEngine {
         snapshot.preamp =
           preset.autoPreamp
           ? EQResponse.autoPreamp(preset.bands, sampleRate: current.rate) : preset.manualPreamp
-        let newSession = TapSession()
+        let newSession = VirtualOutputSession()
         try newSession.start(route: current, preset: preset, preamp: snapshot.preamp)
         session = newSession
         meterMonitor?.setDSP(newSession.dsp)
         applied = preset
-        lastCallback = 0
-        callbackChangedAt = Date()
       } else {
         applySettings()
       }
       guard let session else { return }
       let meter = meq_meter(session.dsp)
-      if meter.callbacks != lastCallback {
-        lastCallback = meter.callbacks
-        callbackChangedAt = Date()
-      }
-      // Zero samples are legitimate silence. Only callback/layout failures trigger recovery.
       if meter.faults > 8 {
         throw AudioFailure(
           message:
             "Audio buffers changed unexpectedly. Ordinary playback has been restored. Retry to reconnect."
         )
-      }
-      if Date().timeIntervalSince(callbackChangedAt) > 5 {
-        if HAL.hasExternalPlayback(output: current.id) {
-          throw AudioFailure(
-            message:
-              "The audio callback stopped while an application was playing. Ordinary playback has been restored. Retry to reconnect."
-          )
-        }
-        callbackChangedAt = Date()
       }
       snapshot.state = .running
     } catch {
@@ -213,7 +254,7 @@ public final class AudioEngine {
         return "No default audio output is available."
       }
       return
-        "Output: \(route.name)\nSample rate: \(route.rate) Hz\nChannels: \(route.channels)\nFormat supported: \(route.supportedFormat)\nStatus: \(route.suspension ?? "Ready")"
+        "Backend: virtual output / shared memory\nOutput: \(route.name)\nSample rate: \(route.rate) Hz\nChannels: \(route.channels)\nFormat supported: \(route.supportedFormat)\nStatus: \(route.suspension ?? "Ready")"
     } catch { return error.localizedDescription }
   }
 }

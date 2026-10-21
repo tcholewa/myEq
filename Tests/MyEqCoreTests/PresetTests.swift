@@ -3,6 +3,40 @@ import XCTest
 @testable import MyEqCore
 
 final class PresetTests: XCTestCase {
+  func testVersionOneMigratesWithoutLosingPresetsOrEnablePreference() throws {
+    var old = SavedState()
+    old.current = .botaniq
+    old.enabled = true
+    var personal = EQPreset.flat
+    personal.id = UUID()
+    personal.name = "My saved EQ"
+    old.presets = [personal]
+    var json = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+    json["schemaVersion"] = 1
+    json.removeValue(forKey: "preferredOutputUID")
+    let migrated = try JSONDecoder().decode(
+      SavedState.self, from: JSONSerialization.data(withJSONObject: json))
+    XCTAssertEqual(migrated.schemaVersion, 2)
+    XCTAssertEqual(migrated.current, old.current)
+    XCTAssertEqual(migrated.presets, old.presets)
+    XCTAssertTrue(migrated.enabled)
+    XCTAssertNil(migrated.preferredOutputUID)
+    XCTAssertTrue(migrated.isValid)
+    json["schemaVersion"] = 99
+    XCTAssertThrowsError(
+      try JSONDecoder().decode(SavedState.self, from: JSONSerialization.data(withJSONObject: json)))
+  }
+  func testOutputPreferenceRoundTripAndValidation() throws {
+    var state = SavedState()
+    state.preferredOutputUID = "USB:personal-output"
+    XCTAssertEqual(
+      try JSONDecoder().decode(SavedState.self, from: JSONEncoder().encode(state)), state)
+    state.preferredOutputUID = ""
+    XCTAssertFalse(state.isValid)
+    state.preferredOutputUID = String(repeating: "x", count: 1025)
+    XCTAssertFalse(state.isValid)
+  }
   func testFactoryPresetMatchesReference() {
     XCTAssertTrue(EQPreset.flat.isValid)
     XCTAssertTrue(EQPreset.botaniq.isValid)

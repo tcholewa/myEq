@@ -50,6 +50,19 @@ struct MenuContent: View {
       openWindow(id: "equalizer")
       NSApp.activate(ignoringOtherApps: true)
     }.keyboardShortcut("e", modifiers: [.command, .shift])
+    Menu("Output") {
+      ForEach(model.engineStatus.outputs) { output in
+        Button {
+          model.selectOutput(output.id)
+        } label: {
+          if output.id == model.engineStatus.selectedOutputUID {
+            Label(output.name, systemImage: "checkmark")
+          } else {
+            Text(output.name)
+          }
+        }
+      }
+    }
     Menu("Preset") {
       ForEach(model.allPresets) { preset in
         Button {

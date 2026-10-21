@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build dist
+bash scripts/build-native.sh
 xcodebuild -project myEq.xcodeproj -scheme myEq -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build > build/xcodebuild.log 2>&1 || {
     tail -100 build/xcodebuild.log
     exit 1
@@ -9,6 +10,9 @@ xcodebuild -project myEq.xcodeproj -scheme myEq -configuration Release -derivedD
 package_dir=$(mktemp -d build/package.XXXXXX)
 ditto build/Build/Products/Release/myEq.app "$package_dir/myEq.app"
 mkdir -p "$package_dir/myEq.app/Contents/Resources"
+mkdir -p "$package_dir/myEq.app/Contents/Helpers" "$package_dir/myEq.app/Contents/Library/LaunchAgents"
+cp build/native/myEqRecovery "$package_dir/myEq.app/Contents/Helpers/"
+cp Resources/com.tc.myEq.recovery.plist "$package_dir/myEq.app/Contents/Library/LaunchAgents/"
 swift scripts/icon.swift build/AppIcon.iconset
 cp build/AppIcon.icns "$package_dir/myEq.app/Contents/Resources/AppIcon.icns"
 codesign --force --sign - --options runtime "$package_dir/myEq.app"

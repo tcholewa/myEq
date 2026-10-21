@@ -144,13 +144,31 @@ public enum AudioEngineState: Equatable {
 }
 
 public struct SavedState: Codable, Equatable {
-  public var schemaVersion = 1
+  public var schemaVersion = 2
   public var current = EQPreset.flat
   public var presets: [EQPreset] = []
   public var enabled = false
+  public var preferredOutputUID: String?
   public init() {}
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion, current, presets, enabled, preferredOutputUID
+  }
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let version = try c.decode(Int.self, forKey: .schemaVersion)
+    guard version == 1 || version == 2 else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schemaVersion, in: c, debugDescription: "Unsupported settings version.")
+    }
+    schemaVersion = 2
+    current = try c.decode(EQPreset.self, forKey: .current)
+    presets = try c.decode([EQPreset].self, forKey: .presets)
+    enabled = try c.decode(Bool.self, forKey: .enabled)
+    preferredOutputUID = try c.decodeIfPresent(String.self, forKey: .preferredOutputUID)
+  }
   public var isValid: Bool {
-    schemaVersion == 1 && current.isValid && presets.allSatisfy { $0.isValid && !$0.isFactory }
+    schemaVersion == 2 && (preferredOutputUID.map { !$0.isEmpty && $0.utf8.count <= 1024 } ?? true)
+      && current.isValid && presets.allSatisfy { $0.isValid && !$0.isFactory }
       && Set(presets.map(\.id)).count == presets.count
   }
 }

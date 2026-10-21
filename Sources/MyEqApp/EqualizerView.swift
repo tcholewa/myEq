@@ -83,7 +83,14 @@ struct EqualizerView: View {
             width: 6, height: 6)
           Text(model.engineStatus.state.title).font(.callout.weight(.medium))
         }
-        Text(model.engineStatus.outputName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        Picker(
+          "Output",
+          selection: Binding(
+            get: { model.engineStatus.selectedOutputUID ?? "" }, set: { model.selectOutput($0) })
+        ) {
+          if model.engineStatus.outputs.isEmpty { Text("No output connected").tag("") }
+          ForEach(model.engineStatus.outputs) { Text($0.name).tag($0.id) }
+        }.labelsHidden().frame(width: 220).controlSize(.small)
       }
       Toggle(
         "Enable EQ", isOn: Binding(get: { model.saved.enabled }, set: { model.setEnabled($0) })
@@ -168,7 +175,7 @@ struct EqualizerView: View {
       Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
       Text(detail).font(.callout)
       Spacer()
-      Button("Privacy Settings") { model.showPrivacySettings() }
+      Button("Background Items") { model.showAudioSetup() }
       Button("Retry") { model.engine.retry() }
     }.padding(12).background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
   }

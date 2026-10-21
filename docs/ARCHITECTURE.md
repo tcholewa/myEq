@@ -2,13 +2,21 @@
 
 ## Ownership and signal path
 
-SwiftUI owns the editor and menu bar. `AppModel` holds the current eight-band configuration, presets, selected band, and engine telemetry on the main actor. `AudioEngine` serializes all HAL operations on a dedicated control queue. Only the C++ callback touches real-time filter state and audio samples.
+System clients → HAL mixed stereo output → `myEq.driver` WriteMix → shared-memory ring → app physical-output callback → Apple AUVarispeed clock correction → existing preamp/EQ/limiter → physical output.
 
-Signal path: selected system-output mix → preamp → eight stereo biquads → linked sample-peak limiter → the same output device. Left and right share coefficients but retain independent filter histories. No recording, network access, app-specific controls, or separate microphone input is part of this path.
+The SwiftUI app owns presets and the editor. `AudioEngine` serializes session changes on its control queue. `VirtualOutputSession` opens only the physical output and disables every physical input stream before starting IO. The output callback is C++ and does not call Swift, allocate, lock, log, or perform IPC. There is no capture-tap fallback.
 
-`TapSession` creates a device-scoped private `CATapDescription`, excludes myEq's audio-process object, and sets `mutedWhenTapped`. The tap and physical output form one private aggregate with the output as clock source and tap drift compensation enabled. A single C IOProc reads the trailing tap buffers and writes the physical stereo output. Microphone buffers belonging to duplex hardware are explicitly disabled and never read. Output preferred-channel assignments are honored.
+The output-only C++ AudioServerPlugIn publishes UID `com.tc.myEq.output`, one interleaved Float32 stereo stream, and hardware-proxy volume/mute controls. The host supplies the already mixed stream via WriteMix. Nominal rate changes follow the physical device using the host configuration-change handshake. The driver advertises no input and never calls the client HAL APIs from inside the driver. A host-time clock supplies zero timestamps at a 16,384-frame period.
 
-The device-scoped/single-clock design follows Apple's process-tap and aggregate-device APIs. [Apple's process-tap overview](https://developer.apple.com/documentation/CoreAudio/capturing-system-audio-with-core-audio-taps) and [CoreAudioTapKit's topology discussion](https://github.com/CJStanfield/CoreAudioTapKit) informed the design; no third-party runtime dependency is included.
+`myEqBridge` is a system LaunchDaemon running as `nobody`. Its global Mach service is listed in the driver's `AudioServerPlugIn_MachServices`, following [Apple QA1811](https://developer.apple.com/library/archive/qa/qa1811/_index.html). It brokers an anonymous `MAP_SHARED` mapping through XPC; samples never travel in messages or through the bridge's event loop. The installer records app/helper code hashes in a root-owned trust manifest. The driver carries the bridge hash in its own bundle, which is readable inside its sandbox. Incoming clients complete a two-message handshake: the first sets an XPC code-signing requirement, and the second must pass that requirement before a role or memory mapping is granted. Driver peers must be the Apple-signed audio-driver host; app and recovery peers must be the active console user in the same audit session. Only one app and recovery session are accepted.
+
+## Transport and clocking
+
+`Transport.hpp` defines protocol version 1: immutable format/size/generation fields, cache-line-separated atomic cursors and telemetry, lease state, and 16,384 stereo frames. A single driver WriteMix producer owns `written`; the app owns `read`. Acquire/release ordering protects ordinary sample storage. The writer drops incoming blocks when full and never overwrites unread samples or changes the reader cursor. Mapping headers, sizes, versions, rates, and generations are checked before use. Audio mappings remain alive until IO has stopped.
+
+The physical callback starts after two output blocks are buffered (minimum 256 frames). A preallocated Apple AUVarispeed unit makes slow PI corrections around unity, bounded to ±0.2%, to compensate independent clocks at the same nominal rate. Discontinuities, overruns, and underruns discard buffered history, render silence, and reprime; a 5 ms input fade avoids abrupt restart. Non-finite source samples are contained. All buffers and the converter are prepared before IO; output callbacks larger than the supported storage are rejected and reported. The hardware buffer size is observed, not changed globally.
+
+The driver applies no digital volume. The app proxies master volume/mute or paired channel controls to the physical device, retaining channel balance. Outputs without writable hardware controls remain fixed-volume. Controls are exchanged outside the audio callback.
 
 ## DSP contract
 
@@ -38,32 +46,18 @@ Visual DSP metering defaults off. `meq_set_metering_enabled` changes an atomic e
 
 ## Lifecycle and recovery
 
-The engine exposes bypassed, starting, running, suspended, and error states. Property listeners handle default-output/device-list changes and audio-service restarts; a 250 ms control tick also observes rates, formats, Bluetooth microphone activity, and telemetry. Parameter edits submit settings without re-enumerating devices.
+`myEqRecovery` is an independent per-user LaunchAgent registered by `SMAppService`. It is the sole owner of default-route writes. Before activating it writes a routing-only recovery journal, asks the bridge to activate the prepared renderer's lease, waits for driver availability, then redirects both default media and system sounds. The original alerts destination is preserved separately. Bypass/quit restores the current physical destination before the app stops its renderer. Cleanup changes a default only if it still points at myEq.
 
-Route changes, sleep, Bluetooth hands-free use, bypass, and shutdown stop IO before destroying the IOProc, aggregate, tap, and DSP storage. A normal application exit waits for control-queue cleanup. Fatal buffer faults or a stalled callback during external playback release capture and expose Retry. Silence alone is not a failure. After an audio-service restart the engine recreates its private resources; unexpected format changes suspend processing until a supported route returns.
+The app and recovery agent send health checks every 250 ms. The bridge revokes the session if either peer disappears, the console user changes, a heartbeat is older than 1.5 seconds, or render progress stalls. The driver independently expires the two-second lease and becomes unavailable. The recovery agent restores defaults on connection loss, sleep, or a failed heartbeat. If its journal survives a crash, it retries restoration when it next runs. No samples are journaled.
 
-Unsupported output transports, non-stereo configurations, multiple hardware output streams, and non-Float32 virtual formats remain bypassed. The app currently accepts 32–192 kHz stereo PCM and does not claim support for every device exposing those formats. Force-quit restoration and physical Bluetooth transitions still require the hardware checks in VERIFICATION.md.
+A manual media-default change bypasses and updates the app's enable preference. A destination disconnect instead allows fallback: preserve a physical destination already selected by macOS, otherwise select available built-in output, then another available physical output. This fallback is not restricted to EQ-compatible formats; ordinary playback is restored first, and EQ resumes only on a supported stereo route. The previous disconnected destination is not automatically reclaimed. Bluetooth hands-free mode remains suspended until stereo returns.
 
-## Persistence and packaging
+Rate, buffer size, device topology, sleep/wake, and audio-service changes rebuild the session. Driver/helper failures leave ordinary playback restored and expose Retry. Visual metering remains gated independently of audio health monitoring.
 
-Version-1 Codable settings contain the working preset, personal presets, and desired enable state. Validation rejects non-finite/out-of-range values, malformed band arrays, duplicate preset IDs, and unsupported schema versions. Writes are debounced and atomic. Unreadable settings are preserved under a unique filename before resetting; if preservation fails, saving is disabled rather than overwriting the original.
+## Persistence, installation, and validation
 
-Factory presets are immutable templates. Editing one changes the working copy; Save As creates a personal preset. Launch at login uses `SMAppService.mainApp` and remains off unless selected by the user.
+Settings schema 2 adds an optional preferred output UID. Version-1 presets and enable preference migrate in memory; the next atomic save writes version 2. Invalid or unknown schemas retain the existing preserve-before-reset behavior.
 
-The Xcode app target links the local Swift package statically. `scripts/build.sh` builds a Release arm64 bundle, generates its icon from code, applies local ad-hoc signing, and verifies the signature. Only Apple system libraries are dynamically linked. There is no installer, privileged helper, notarization, or update service in this personal-use version.
+The personal package installs `/Applications/myEq.app`, `/Library/Audio/Plug-Ins/HAL/myEq.driver`, the global bridge, its launchd plist, and the trust manifest. The recovery executable and LaunchAgent plist are embedded in the app. Package components are not relocatable, so Installer cannot upgrade a development copy by mistake. App/driver/helper signatures are verified during packaging and installation. Installing requires administrator authorization, with a manual reboot to load the driver; no audio-service restart or reboot is automatic. Upgrade/removal invokes the previous recovery helper as the console user before unloading services. A previous package is retained for rollback, and uninstall preserves user presets.
 
-## Proposed virtual-output backend
-
-The current process-tap backend requires system-audio capture permission. macOS identifies system-audio capture with a purple privacy indicator, including when the app processes audio in memory without saving a recording. This follows [Apple's tap permission model](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps) and [Control Center indicator documentation](https://support.apple.com/guide/mac-help/quickly-change-settings-mchl50f94f8f/mac).
-
-To replace capture with explicit output routing, a future backend would publish an output-only `myEq` virtual device through an AudioServerPlugIn, transfer its mixed stereo output to the app through authorized shared memory, run the existing DSP, and play to the selected physical device. This avoids using the process-tap or recording-input API for the routed mix. The expected absence of a capture indicator must still be validated on supported macOS releases. [eqMac documents a similar shared-memory driver architecture](https://github.com/bitgapp/eqMac#technology); its public repository describes an older release, not the current private implementation.
-
-Required work includes:
-
-- Add a backend boundary around audio sessions, retaining the tap option during development and reusing the DSP, presets, and editor.
-- Build a stereo output-only driver and an authenticated, bounded shared-memory transport with no allocation or blocking inside either real-time callback.
-- Coordinate physical-device clocking, buffering, drift correction, rate changes, volume/mute, and output switching.
-- Preserve the previous default output and provide restoration on bypass, quit, disconnect, and app crash; crash recovery requires an independent supervisor or equivalent tested recovery mechanism.
-- Package installation, updates, and removal with administrator authorization. Apple's [virtual-driver sample](https://developer.apple.com/documentation/coreaudio/creating-an-audio-server-driver-plug-in) installs under `/Library/Audio/Plug-Ins/HAL` and requires a reboot. This is a user-space driver, not a kernel extension.
-
-This backend is a proposal, not part of the current build. Installing a generic loopback device alone does not establish an indicator-free path: applications recording its input may still need microphone access, as documented by [BlackHole](https://github.com/ExistentialAudio/BlackHole#why-is-nothing-playing-through-blackhole).
+This is locally ad-hoc signed, not notarized distribution. The architecture uses no recording-input or process-tap API; the expected absence of capture indicators must be verified on the target macOS release. The initial tests cover offline rendering and mocked recovery, not installed-system crash recovery, real-device performance, or end-to-end latency. See VERIFICATION.md for the current acceptance status.

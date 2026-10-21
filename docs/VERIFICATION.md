@@ -84,15 +84,32 @@ The live meter was then replaced with a fixed-size native view and persistent Co
 
 After restart into the new executable (UUID `73337BF5-F024-3848-B220-79133F0085A3`), three successive three-second `top` intervals measured **3.2%, 3.7%, and 3.6% CPU**. A subsequent eight-second profile confirmed that both audio processing and live meter updates were active. The main thread spent 5,360 of 5,510 samples waiting in `mach_msg2_trap`; the previous SwiftUI/AttributeGraph layout hotspot was absent. The report is retained locally in `build/cpu-native-meter-30hz.txt`. This measures the combined renderer and cadence change; it does not isolate the benefit of 30 Hz alone. User confirmation of the native meter's appearance and a second hidden-window measurement are pending.
 
+## Virtual-output migration (0.2.0)
+
+The process-tap backend has been replaced in source by an output-only AudioServerPlugIn, anonymous shared-memory transport, physical-output renderer, global bridge, and per-user recovery agent. The UI now selects physical outputs and settings migrate from schema 1 to 2. The native driver and helper binaries compile and are locally signed. A local installer, uninstall script, and rollback script are included.
+
+Verified so far:
+
+- **27 Swift tests pass normally and with AddressSanitizer**, including preservation of presets and enable preference during schema-1 migration, output UID round-trip/validation, and the existing DSP/meter tests.
+- Native output-only driver property/operation checks pass: no input stream and no ReadInput operation.
+- Two distinct XPC mappings share atomic state correctly with page-rounded allocation. Bounded overflow, sanitization, wraparound, and 20,000 concurrently transferred blocks preserve exact stereo ordering.
+- Real Apple AUVarispeed → DSP rendering passes at 44.1/48/96/192 kHz, including simulated 0 and ±300 ppm clock drift at 48 kHz, with no underruns/overruns, no crosstalk, finite output, and bounded buffering over 12,000 blocks per case. Planar and reversed stereo outputs pass using the new renderer, with deliberately invalid microphone input ignored. Mismatched output-buffer sizes produce silence and a health fault. These tests are accelerated/offline and do not measure hardware latency.
+- Mocked hardware tests verify restoration of separate media/alert defaults, preservation of manual selections, and a usable physical fallback after disconnect.
+- The native suite also passes with AddressSanitizer. Audio Unit discovery failed in the restricted sandbox; the successful run used access to the system Audio Unit service.
+- The Release app, driver, and helpers build and pass local signature verification. The installer expands successfully: signatures, pinned hashes, driver service declaration, embedded plists, script syntax, and fixed installation locations are verified from its payload. `pkgbuild` emits four `write: Permission denied` diagnostics while still exiting successfully; no missing or damaged signed payload was found during expansion and verification.
+- Swift formatting lint and whitespace checks pass. Source inspection finds no process-tap creation/destruction, ScreenCaptureKit, or audio-capture usage description in the shipping sources and resources.
+
+The earlier tap-backend CPU measurements above do **not** establish the new driver's CPU cost. The driver has not yet been installed or exercised through the real HAL host in this migration. No claim is made yet about absence of indicators, force-quit recovery, latency, or the 2%/6% CPU targets.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
 
-- Verify close/reopen, minimize/restore, Hide/Unhide, switching Spaces, and fully covering/uncovering the editor during playback. Confirm fresh meters and the latest preset graph on return, continued audio while hidden, and no meter work when opening only the menu bar. Compare whole-app CPU and wakeups in Activity Monitor or Instruments before/after hiding.
-- Compare Flat/bypass playback for doubled audio, volume/mute behavior, and stereo separation; then compare Botaniq1 and an audible narrow-band edit.
-- Verify built-in speakers, physical USB/HDMI stereo, and Bluetooth stereo individually. The inspected output included an eqMac route, so it is not proof of direct physical-device compatibility.
-- Switch outputs while playing; disconnect/reconnect the selected device; change between 44.1/48/96/192 kHz where hardware supports them.
-- Enter/leave Bluetooth headset microphone mode; confirm suspension/resumption and test AirPods handoff separately.
-- Sleep/wake, quit, and force-quit during playback; verify ordinary playback returns and no private devices remain. Test audio-service restart during a controlled development session.
-- Run a 30-minute real-time playback/editing session and measure end-to-end added latency. The design target is under 20 ms on built-in/wired output; only the limiter's 1 ms algorithmic delay and offline DSP runtime are currently established.
-- Exercise preset Save As/update/rename/delete, numeric entry, graph dragging, faders, menu bar reopening, relaunch persistence, and launch at login in the native interface.
+- Install the package, reboot, allow the recovery agent, and confirm the output-only device loads and authenticated XPC/shared-memory setup succeeds. Test wrong-version/unauthorized clients and update/rollback/uninstall.
+- With other capture apps stopped, verify EQ playback without system-audio or microphone permission and without a myEq capture indicator. Confirm two simultaneous playback applications are mixed exactly once.
+- Verify close/reopen, minimize/restore, Hide/Unhide, Spaces, and full occlusion: audio continues, visual work stops, and fresh meters return.
+- Test volume/mute, preferred stereo channels, Flat/bypass, Botaniq1 edits, and left/right separation on built-in, USB/HDMI, and Bluetooth outputs.
+- Test output-menu changes, manual macOS bypass, destination disconnect/fallback, sample-rate/buffer changes, and Bluetooth microphone transitions.
+- Independently terminate the app, bridge, recovery agent, and driver host. Verify ordinary playback returns, defaults chosen manually are preserved, and no stale audio is replayed. Include sleep/wake, logout/user switching, and audio-service restart.
+- Run 30 minutes of playback/editing. Measure app + driver + helpers together and report Core Audio's incremental CPU separately; target approximately 2% hidden / 6% visible at 48 kHz and 256 frames on this Mac. Measure added wired latency against the under-20-ms target.
+- Exercise preset management, fields, graph/faders, persistence, menu bar reopening, and launch at login in the installed app.

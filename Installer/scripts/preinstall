@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+if pgrep -x myEq >/dev/null; then
+  echo "Quit myEq before installing or updating its audio components." >&2
+  exit 1
+fi
+support='/Library/Application Support/myEq'
+if [ -L "$support" ]; then echo "Unexpected symbolic link at myEq installation directory." >&2; exit 1; fi
+if [ -e /Applications/myEq.app ]; then
+  identifier=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' /Applications/myEq.app/Contents/Info.plist)
+  if [ "$identifier" != com.tc.myEq ]; then echo "Another app occupies /Applications/myEq.app." >&2; exit 1; fi
+fi
+console_uid=$(stat -f %u /dev/console)
+console_user=$(stat -f %Su /dev/console)
+if [ "$console_uid" -ge 500 ] && [ -x /Applications/myEq.app/Contents/Helpers/myEqRecovery ]; then
+  launchctl asuser "$console_uid" sudo -u "$console_user" /Applications/myEq.app/Contents/Helpers/myEqRecovery --restore
+  launchctl bootout "gui/$console_uid/com.tc.myEq.recovery" 2>/dev/null || true
+fi
+launchctl bootout system/com.tc.myEq.bridge 2>/dev/null || true
+mkdir -p "$support"
+chmod 755 "$support"
+chown root:wheel "$support"
+if [ -e "$support/trust.plist" ]; then
+  backup="$support/previous"
+  # Retain exactly one complete previous installation. Only this app's own backup is replaced.
+  if [ -e "$backup" ]; then mv "$backup" "$support/previous-$(date +%s)"; fi
+  mkdir -p "$backup"
+  for item in /Applications/myEq.app /Library/Audio/Plug-Ins/HAL/myEq.driver "$support/myEqBridge" "$support/trust.plist" /Library/LaunchDaemons/com.tc.myEq.bridge.plist; do
+    if [ -e "$item" ]; then ditto "$item" "$backup/$(basename "$item")"; fi
+  done
+fi

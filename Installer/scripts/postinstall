@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+chown -R root:wheel /Applications/myEq.app /Library/Audio/Plug-Ins/HAL/myEq.driver '/Library/Application Support/myEq'
+chown root:wheel /Library/LaunchDaemons/com.tc.myEq.bridge.plist
+chmod 644 /Library/LaunchDaemons/com.tc.myEq.bridge.plist '/Library/Application Support/myEq/trust.plist'
+chmod 755 '/Library/Application Support/myEq/myEqBridge'
+codesign --verify --strict /Applications/myEq.app
+codesign --verify --strict /Library/Audio/Plug-Ins/HAL/myEq.driver
+launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
+echo 'myEq installed. Restart macOS to load the driver, then open /Applications/myEq.app and allow its background helper.'

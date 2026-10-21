@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.tc.myEq.bridge</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/myEq/myEqBridge</string></array>
+<key>UserName</key><string>nobody</string>
+<key>MachServices</key><dict><key>com.tc.myEq.bridge</key><true/></dict>
+<key>ProcessType</key><string>Background</string>
+</dict></plist>

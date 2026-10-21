@@ -54,6 +54,12 @@ final class AppModel: ObservableObject {
       self.engineStatus = status
       if changedRate { self.refreshGraph() }
     }
+    engine.onBypass = { [weak self] in self?.setEnabled(false) }
+    engine.onSelectedOutput = { [weak self] uid in
+      guard let self else { return }
+      self.saved.preferredOutputUID = uid
+      self.flush()
+    }
     engine.onMeter = { [weak self] levels in
       guard let self, self.isEditorVisible else { return }
       self.outputMeter.update(levels)
@@ -67,8 +73,30 @@ final class AppModel: ObservableObject {
       center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) {
         [weak self] _ in Task { @MainActor in self?.engine.setSleeping(false) }
       })
+    notifications.append(
+      center.addObserver(
+        forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main
+      ) {
+        [weak self] _ in Task { @MainActor in self?.engine.setSleeping(true) }
+      })
+    notifications.append(
+      center.addObserver(
+        forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main
+      ) {
+        [weak self] _ in Task { @MainActor in self?.engine.setSleeping(false) }
+      })
     refreshGraph()
-    if !previewMode { engine.configure(preset: saved.current, enabled: saved.enabled) }
+    if !previewMode {
+      do {
+        let service = SMAppService.agent(plistName: "com.tc.myEq.recovery.plist")
+        if service.status == .notRegistered { try service.register() }
+      } catch {
+        message =
+          "Install myEq.pkg and allow myEq in System Settings → General → Login Items & Extensions. \(error.localizedDescription)"
+      }
+      engine.configure(
+        preset: saved.current, enabled: saved.enabled, outputUID: saved.preferredOutputUID)
+    }
   }
   var allPresets: [EQPreset] { EQPreset.factory + saved.presets }
   var isModified: Bool { allPresets.first(where: { $0.id == saved.current.id }) != saved.current }
@@ -141,7 +169,10 @@ final class AppModel: ObservableObject {
   }
   private func changed() {
     guard saved.isValid else { return }
-    if !previewMode { engine.configure(preset: saved.current, enabled: saved.enabled) }
+    if !previewMode {
+      engine.configure(
+        preset: saved.current, enabled: saved.enabled, outputUID: saved.preferredOutputUID)
+    }
     refreshGraph()
     saveWork?.cancel()
     let work = DispatchWorkItem { [weak self] in self?.flush() }
@@ -173,9 +204,12 @@ final class AppModel: ObservableObject {
     graphWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.025, execute: work)
   }
-  func showPrivacySettings() {
-    NSWorkspace.shared.open(
-      URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")!)
+  func selectOutput(_ uid: String) {
+    saved.preferredOutputUID = uid
+    changed()
+  }
+  func showAudioSetup() {
+    SMAppService.openSystemSettingsLoginItems()
   }
 }
 

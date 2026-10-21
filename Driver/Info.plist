@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.tc.myEq.driver</string>
+<key>CFBundleExecutable</key><string>myEqDriver</string>
+<key>CFBundleName</key><string>myEq</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>0.2.0</string>
+<key>LSMinimumSystemVersion</key><string>27.0</string>
+<key>CFPlugInFactories</key><dict><key>2E3DCD19-6AFE-41D9-91CB-82462E97CE4D</key><string>MyEqDriverCreate</string></dict>
+<key>CFPlugInTypes</key><dict><key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key><array><string>2E3DCD19-6AFE-41D9-91CB-82462E97CE4D</string></array></dict>
+<key>AudioServerPlugIn_MachServices</key><array><string>com.tc.myEq.bridge</string></array>
+<key>AudioServerPlugIn_Network</key><false/>
+</dict></plist>
