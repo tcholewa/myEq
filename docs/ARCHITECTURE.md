@@ -1,0 +1,37 @@
+# Architecture
+
+## Ownership and signal path
+
+SwiftUI owns the editor and menu bar. `AppModel` holds the current eight-band configuration, presets, selected band, and engine telemetry on the main actor. `AudioEngine` serializes all HAL operations on a dedicated control queue. Only the C++ callback touches real-time filter state and audio samples.
+
+Signal path: selected system-output mix → preamp → eight stereo biquads → linked sample-peak limiter → the same output device. Left and right share coefficients but retain independent filter histories. No recording, network access, app-specific controls, or separate microphone input is part of this path.
+
+`TapSession` creates a device-scoped private `CATapDescription`, excludes myEq's audio-process object, and sets `mutedWhenTapped`. The tap and physical output form one private aggregate with the output as clock source and tap drift compensation enabled. A single C IOProc reads the trailing tap buffers and writes the physical stereo output. Microphone buffers belonging to duplex hardware are explicitly disabled and never read. Output preferred-channel assignments are honored.
+
+The device-scoped/single-clock design follows Apple's process-tap and aggregate-device APIs. [Apple's process-tap overview](https://developer.apple.com/documentation/CoreAudio/capturing-system-audio-with-core-audio-taps) and [CoreAudioTapKit's topology discussion](https://github.com/CJStanfield/CoreAudioTapKit) informed the design; no third-party runtime dependency is included.
+
+## DSP contract
+
+The C API in `CDSP.h` is shared by the audio engine, graph/model, and offline tests. `meq_prepare` and layout configuration require a stopped callback. A bounded single-producer/single-consumer queue transfers prepared coefficient banks from the control queue to the callback. If full, the latest desired preset remains pending and is retried by the next control tick. The callback drains to the newest bank when the previous 20 ms crossfade finishes. Filter coefficients are never interpolated through unstable intermediate values.
+
+Eight double-precision biquads use the [W3C Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) equations. Bell gain is ±24 dB with 0.05–5 octave bandwidth; shelf slope is 0.1–1; cut Q is 0.1–10, defaulting to Butterworth Q. Frequency is constrained to 20 Hz–min(20 kHz, 0.45 × sample rate). Stored frequencies survive output changes, while processing and graph positions use the effective frequency.
+
+Auto preamp searches the combined response from DC through Nyquist, adds every band's center frequency to the search, and rounds attenuation upward to 0.1 dB. It can attenuate more than the manual control's −60 dB lower bound. The graph uses the same coefficient code and shows the linear response, including preamp; it does not depict the signal-dependent limiter.
+
+The limiter has a 1 ms delay, linked left/right gain, a monotonic lookahead peak queue, a −0.5 dBFS sample ceiling, and 50 ms release. It is a sample-peak limiter, not an oversampled true-peak limiter. Its delay is in addition to Core Audio and hardware latency. All storage is allocated before audio starts; the callback does not allocate, lock, log, perform file IO, or call Swift. Telemetry atomics are asserted lock-free at compile time. Null tap data means silence; changed buffer topology and non-finite samples increment fault counters.
+
+## Lifecycle and recovery
+
+The engine exposes bypassed, starting, running, suspended, and error states. Property listeners handle default-output/device-list changes and audio-service restarts; a 250 ms control tick also observes rates, formats, Bluetooth microphone activity, and telemetry. Parameter edits submit settings without re-enumerating devices.
+
+Route changes, sleep, Bluetooth hands-free use, bypass, and shutdown stop IO before destroying the IOProc, aggregate, tap, and DSP storage. A normal application exit waits for control-queue cleanup. Fatal buffer faults or a stalled callback during external playback release capture and expose Retry. Silence alone is not a failure. After an audio-service restart the engine recreates its private resources; unexpected format changes suspend processing until a supported route returns.
+
+Unsupported output transports, non-stereo configurations, multiple hardware output streams, and non-Float32 virtual formats remain bypassed. The app currently accepts 32–192 kHz stereo PCM and does not claim support for every device exposing those formats. Force-quit restoration and physical Bluetooth transitions still require the hardware checks in VERIFICATION.md.
+
+## Persistence and packaging
+
+Version-1 Codable settings contain the working preset, personal presets, and desired enable state. Validation rejects non-finite/out-of-range values, malformed band arrays, duplicate preset IDs, and unsupported schema versions. Writes are debounced and atomic. Unreadable settings are preserved under a unique filename before resetting; if preservation fails, saving is disabled rather than overwriting the original.
+
+Factory presets are immutable templates. Editing one changes the working copy; Save As creates a personal preset. Launch at login uses `SMAppService.mainApp` and remains off unless selected by the user.
+
+The Xcode app target links the local Swift package statically. `scripts/build.sh` builds a Release arm64 bundle, generates its icon from code, applies local ad-hoc signing, and verifies the signature. Only Apple system libraries are dynamically linked. There is no installer, privileged helper, notarization, or update service in this personal-use version.

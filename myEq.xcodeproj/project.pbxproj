@@ -1,0 +1,64 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1; classes = {}; objectVersion = 60;
+ objects = {
+4AE4A885EF26CC9F4DA548B8 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+97721B1F00ECE2536980DC3B = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EqualizerView.swift; sourceTree = "<group>"; };
+AAC2C2110B98FE950DD50341 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyEqApp.swift; sourceTree = "<group>"; };
+87F5BBF8EA4A8FB11B01C21C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseGraph.swift; sourceTree = "<group>"; };
+2CBE67F93E360AAFA56DDD6F = { isa = PBXBuildFile; fileRef = 4AE4A885EF26CC9F4DA548B8; };
+4944436715422822A530215C = { isa = PBXBuildFile; fileRef = 97721B1F00ECE2536980DC3B; };
+3491CEA10EC078E542606A17 = { isa = PBXBuildFile; fileRef = AAC2C2110B98FE950DD50341; };
+811F9D3F0D26C01C7543DE7A = { isa = PBXBuildFile; fileRef = 87F5BBF8EA4A8FB11B01C21C; };
+38A007151ABE87CC01A5B6E9 = { isa = PBXFileReference; explicitFileType = wrapper.application; path = myEq.app; sourceTree = BUILT_PRODUCTS_DIR; };
+BCE16DD0260827ECF338C787 = { isa = PBXGroup; path = Sources/MyEqApp; sourceTree = "<group>"; children = (4AE4A885EF26CC9F4DA548B8,97721B1F00ECE2536980DC3B,AAC2C2110B98FE950DD50341,87F5BBF8EA4A8FB11B01C21C); };
+FBDC4F23F93125BBEEAE800C = { isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (38A007151ABE87CC01A5B6E9); };
+325F10A6957A34D66CB8C0E4 = { isa = PBXGroup; sourceTree = "<group>"; children = (BCE16DD0260827ECF338C787,FBDC4F23F93125BBEEAE800C); };
+582681C2EAE02B3F3D399C0C = { isa = XCLocalSwiftPackageReference; relativePath = .; };
+94A0426E8D3203DA5468CCF0 = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = MyEqCore; };
+F178867DA2879CAE0F60630A = { isa = PBXBuildFile; productRef = 94A0426E8D3203DA5468CCF0; };
+D3C3E067FC1BBCCEAA4D9313 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (2CBE67F93E360AAFA56DDD6F,4944436715422822A530215C,3491CEA10EC078E542606A17,811F9D3F0D26C01C7543DE7A); runOnlyForDeploymentPostprocessing = 0; };
+BEE832DE65DB5CA7507F7EF9 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (F178867DA2879CAE0F60630A); runOnlyForDeploymentPostprocessing = 0; };
+ECE2D868E17AEF81A05610A3 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+369E70E1EE7A07C74E211771 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {
+        PRODUCT_NAME = myEq;
+        PRODUCT_BUNDLE_IDENTIFIER = com.tc.myEq;
+        SDKROOT = macosx;
+        ALWAYS_SEARCH_USER_PATHS = NO;
+        MACOSX_DEPLOYMENT_TARGET = 27.0;
+        ARCHS = arm64;
+        SWIFT_VERSION = 5.0;
+        SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+        CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+        INFOPLIST_FILE = Resources/Info.plist;
+        GENERATE_INFOPLIST_FILE = NO;
+        CODE_SIGN_IDENTITY = "-";
+        CODE_SIGN_STYLE = Manual;
+        ENABLE_APP_SANDBOX = NO;
+        ENABLE_HARDENED_RUNTIME = YES;
+        LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+    }; };
+502D350B1D76FA1259FFDE36 = { isa = XCBuildConfiguration; name = Release; buildSettings = {
+        PRODUCT_NAME = myEq;
+        PRODUCT_BUNDLE_IDENTIFIER = com.tc.myEq;
+        SDKROOT = macosx;
+        ALWAYS_SEARCH_USER_PATHS = NO;
+        MACOSX_DEPLOYMENT_TARGET = 27.0;
+        ARCHS = arm64;
+        SWIFT_VERSION = 5.0;
+        SWIFT_OPTIMIZATION_LEVEL = "-O";
+        CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+        INFOPLIST_FILE = Resources/Info.plist;
+        GENERATE_INFOPLIST_FILE = NO;
+        CODE_SIGN_IDENTITY = "-";
+        CODE_SIGN_STYLE = Manual;
+        ENABLE_APP_SANDBOX = NO;
+        ENABLE_HARDENED_RUNTIME = YES;
+        LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+    }; };
+E30856D4D988D9571DE7D610 = { isa = XCConfigurationList; buildConfigurations = (369E70E1EE7A07C74E211771,502D350B1D76FA1259FFDE36); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+0E8A3AD980EC179856012B7E = { isa = PBXNativeTarget; buildConfigurationList = E30856D4D988D9571DE7D610; buildPhases = (D3C3E067FC1BBCCEAA4D9313,BEE832DE65DB5CA7507F7EF9,ECE2D868E17AEF81A05610A3); buildRules = (); dependencies = (); name = myEq; packageProductDependencies = (94A0426E8D3203DA5468CCF0); productName = myEq; productReference = 38A007151ABE87CC01A5B6E9; productType = "com.apple.product-type.application"; };
+98F54143AB4E86B28C3AFEE0 = { isa = PBXProject; attributes = { LastUpgradeCheck = 2700; }; buildConfigurationList = E30856D4D988D9571DE7D610; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en,Base); mainGroup = 325F10A6957A34D66CB8C0E4; productRefGroup = FBDC4F23F93125BBEEAE800C; projectDirPath = ""; projectRoot = ""; packageReferences = (582681C2EAE02B3F3D399C0C); targets = (0E8A3AD980EC179856012B7E); };
+ };
+ rootObject = 98F54143AB4E86B28C3AFEE0;
+}

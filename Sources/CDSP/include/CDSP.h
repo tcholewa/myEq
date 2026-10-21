@@ -11,16 +11,16 @@ typedef struct MEQDSP MEQDSP;
 typedef struct { int32_t type; bool enabled; double frequency, gain, width; } MEQBand;
 typedef struct { int32_t buffer, channel, stride; } MEQChannel;
 typedef struct { float peak, reduction; uint64_t callbacks, faults; } MEQMeter;
-MEQDSP *meq_create(void);
-void meq_destroy(MEQDSP *dsp);
+MEQDSP *_Null_unspecified meq_create(void);
+void meq_destroy(MEQDSP *_Null_unspecified dsp);
 // prepare/layout require a stopped audio callback. submit is single-producer.
-bool meq_prepare(MEQDSP *, double rate, const MEQBand *, int count, double preamp);
-bool meq_submit(MEQDSP *, const MEQBand *, int count, double preamp);
-void meq_layout(MEQDSP *, MEQChannel inL, MEQChannel inR, MEQChannel outL, MEQChannel outR);
-void meq_process(MEQDSP *, float *interleavedStereo, uint32_t frames);
-MEQMeter meq_meter(MEQDSP *);
-double meq_response(const MEQBand *, int count, double frequency, double rate);
-OSStatus meq_audio_callback(AudioObjectID, const AudioTimeStamp *, const AudioBufferList *, const AudioTimeStamp *, AudioBufferList *, const AudioTimeStamp *, void *);
+bool meq_prepare(MEQDSP *_Null_unspecified , double rate, const MEQBand *_Null_unspecified , int count, double preamp);
+bool meq_submit(MEQDSP *_Null_unspecified , const MEQBand *_Null_unspecified , int count, double preamp);
+void meq_layout(MEQDSP *_Null_unspecified , MEQChannel inL, MEQChannel inR, MEQChannel outL, MEQChannel outR);
+void meq_process(MEQDSP *_Null_unspecified , float *_Null_unspecified interleavedStereo, uint32_t frames);
+MEQMeter meq_meter(MEQDSP *_Null_unspecified );
+double meq_response(const MEQBand *_Null_unspecified , int count, double frequency, double rate);
+OSStatus meq_audio_callback(AudioObjectID, const AudioTimeStamp * _Nonnull, const AudioBufferList * _Nonnull, const AudioTimeStamp * _Nonnull, AudioBufferList * _Nonnull, const AudioTimeStamp * _Nonnull, void * _Nullable);
 #ifdef __cplusplus
 }
 #endif

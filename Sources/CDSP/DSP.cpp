@@ -8,6 +8,7 @@
 #include <vector>
 
 namespace {
+static_assert(std::atomic<float>::is_always_lock_free && std::atomic<uint64_t>::is_always_lock_free, "Audio telemetry must be lock-free");
 constexpr int bandsCount = 8, queueSize = 16;
 constexpr double pi = 3.14159265358979323846;
 struct Coeff { double b0=1,b1=0,b2=0,a1=0,a2=0; };
@@ -97,7 +98,7 @@ struct MEQDSP {
             a=old.tick(l,0)*(1-t)+a*t;b=old.tick(r,1)*(1-t)+b*t;--fadeRemaining;
         }
         if(!std::isfinite(a)||!std::isfinite(b)) {
-            a=b=0;current.state[0][0]={};
+            a=b=0;
             std::memset(current.state,0,sizeof(current.state));std::memset(old.state,0,sizeof(old.state));
             faults.fetch_add(1,std::memory_order_relaxed);
         }
@@ -148,17 +149,26 @@ double meq_response(const MEQBand*b,int n,double f,double fs) {
 OSStatus meq_audio_callback(AudioObjectID,const AudioTimeStamp*,const AudioBufferList*in,const AudioTimeStamp*,AudioBufferList*out,const AudioTimeStamp*,void*context) {
     auto*d=static_cast<MEQDSP*>(context);
     for(UInt32 i=0;i<out->mNumberBuffers;++i)if(out->mBuffers[i].mData)memset(out->mBuffers[i].mData,0,out->mBuffers[i].mDataByteSize);
+    auto layoutValid=[](const AudioBufferList*list,MEQChannel c) {
+        return c.buffer>=0 && uint32_t(c.buffer)<list->mNumberBuffers && c.stride>0 && c.channel>=0 && c.channel<c.stride && list->mBuffers[c.buffer].mNumberChannels==uint32_t(c.stride);
+    };
+    if(!layoutValid(in,d->inL)||!layoutValid(in,d->inR)) {
+        d->faults.fetch_add(1,std::memory_order_relaxed);d->callbacks.fetch_add(1,std::memory_order_relaxed);return noErr;
+    }
     auto available=[](const AudioBufferList*list,MEQChannel c)->uint32_t {
         if(c.buffer<0||uint32_t(c.buffer)>=list->mNumberBuffers||c.stride<=0)return 0;
         const auto&b=list->mBuffers[c.buffer];if(!b.mData||c.channel<0||c.channel>=c.stride||b.mNumberChannels!=uint32_t(c.stride))return 0;
         return b.mDataByteSize/(sizeof(float)*c.stride);
     };
-    auto n=std::min({available(in,d->inL),available(in,d->inR),available(out,d->outL),available(out,d->outR)});
+    const auto inputL=available(in,d->inL),inputR=available(in,d->inR);
+    auto n=std::min(available(out,d->outL),available(out,d->outR));
     if(!n){d->faults.fetch_add(1,std::memory_order_relaxed);d->callbacks.fetch_add(1,std::memory_order_relaxed);return noErr;}
-    auto source=[in](MEQChannel c,uint32_t i){return static_cast<const float*>(in->mBuffers[c.buffer].mData)[i*c.stride+c.channel];};
+    // A dormant tap may supply null input buffers. Render silence and keep the
+    // physical output clock running; absence of signal is not a callback failure.
+    auto source=[in](MEQChannel c,uint32_t i,uint32_t frames){return i<frames ? static_cast<const float*>(in->mBuffers[c.buffer].mData)[i*c.stride+c.channel] : 0.f;};
     auto dest=[out](MEQChannel c,uint32_t i,double v){static_cast<float*>(out->mBuffers[c.buffer].mData)[i*c.stride+c.channel]=float(v);};
     d->begin();float peak=0;double minGain=1;
-    for(uint32_t i=0;i<n;++i){double l=source(d->inL,i),r=source(d->inR,i);d->frame(l,r);dest(d->outL,i,l);dest(d->outR,i,r);peak=std::max(peak,float(std::max(std::abs(l),std::abs(r))));minGain=std::min(minGain,d->limiterGain);}
+    for(uint32_t i=0;i<n;++i){double l=source(d->inL,i,inputL),r=source(d->inR,i,inputR);d->frame(l,r);dest(d->outL,i,l);dest(d->outR,i,r);peak=std::max(peak,float(std::max(std::abs(l),std::abs(r))));minGain=std::min(minGain,d->limiterGain);}
     d->peak.store(peak,std::memory_order_relaxed);d->reduction.store(float(-20*log10(std::max(minGain,1e-20))),std::memory_order_relaxed);d->callbacks.fetch_add(1,std::memory_order_relaxed);return noErr;
 }
 }
