@@ -10,6 +10,9 @@ chmod 644 /Library/LaunchDaemons/com.tc.myEq.bridge.plist '/Library/Application 
 chmod 755 '/Library/Application Support/myEq/myEqBridge'
 codesign --verify --strict /Applications/myEq.app
 codesign --verify --strict /Library/Audio/Plug-Ins/HAL/myEq.driver
+# Every install (including a same-build reinstall) needs a fresh per-user registration.
+registration_id=$(/usr/bin/uuidgen)
+/usr/libexec/PlistBuddy -c "Add installationID string $registration_id" '/Library/Application Support/myEq/trust.plist'
 launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
 # Replacing the bundle unloads its HAL host, even when its code hash is unchanged.
 # Reload only after all signed components and their bridge are in place.

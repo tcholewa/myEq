@@ -127,7 +127,13 @@ The user subsequently reported “perfect” after the no-reboot driver reload a
 
 The virtual device now receives the selected physical output’s name through the existing transport-open/attach control messages and publishes `myEq: {original name}`. The change applies only after accepted driver reconfiguration, follows session/output changes, and resets to `myEq` on detach. Tests exercise HAL property reads and synchronous name notifications, unchanged-name suppression, Unicode, rejected/aborted configurations, detach, and stable UID/manufacturer/stream properties.
 
-The native driver, recovery, transport, and rendering suite passes. The driver tests also pass with AddressSanitizer. The Release app and installer build; expanded app/driver/helper signatures and all pinned hashes match the build artifacts, and the package contains the Core Audio reload script. Swift formatting and whitespace checks pass. The update is packaged at `dist/myEq.pkg`; installation is awaiting the user quitting the currently running app.
+The native driver, recovery, transport, and rendering suite passes. The driver tests also pass with AddressSanitizer. The Release app and installer build; expanded app/driver/helper signatures and all pinned hashes match the build artifacts, and the package contains the Core Audio reload script. Swift formatting and whitespace checks pass.
+
+The naming package was installed successfully after the user closed myEq. Its postinstall reloaded Core Audio automatically: the new driver host appeared without a separate reload or reboot, and ordinary output remained ADAM Audio D3V while the app was closed. Installed signatures and pinned identities matched the verified artifacts, and Spotlight still listed only `/Applications/myEq.app`. Reopening exposed a separate upgrade issue: `launchctl` had no recovery job, but the app's existing ServiceManagement registration prevented first-install registration from running. The app could therefore not attach a named session yet.
+
+The installer now writes a fresh installation UUID to its trust manifest. On first launch after each install, the app refreshes an existing approved registration through awaited unregister/register, remembers the successful UUID per user, and gates audio on readiness. User-disabled services still require approval. This also handles reinstalling the same package; a build-only version stamp would not.
+
+This follow-up builds and passes formatting/whitespace checks. Expanded-package verification confirms the UUID insertion preserves every signing hash. Installation succeeded, with installed app/driver/helper signatures matching the verified build and a valid fresh installation UUID present. Core Audio loaded the replacement driver automatically. The app was closed during these checks; live registration refresh and the visible destination name await reopening it.
 
 ## Remaining hardware acceptance checks
 
