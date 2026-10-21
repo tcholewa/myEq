@@ -3,7 +3,8 @@ set -euo pipefail
 if [ "$(id -u)" -ne 0 ]; then echo 'Run this script with sudo.' >&2; exit 1; fi
 if pgrep -x myEq >/dev/null; then echo 'Quit myEq first.' >&2; exit 1; fi
 support='/Library/Application Support/myEq'
-backup="$support/previous"
+backup="$support/previous.noindex"
+if [ ! -d "$backup" ]; then backup="$support/previous"; fi
 for item in myEq.app myEq.driver myEqBridge trust.plist com.tc.myEq.bridge.plist; do
   if [ ! -e "$backup/$item" ]; then echo 'No complete previous installation is available.' >&2; exit 1; fi
 done
@@ -14,7 +15,8 @@ if [ "$console_uid" -ge 500 ]; then
   launchctl bootout "gui/$console_uid/com.tc.myEq.recovery" 2>/dev/null || true
 fi
 launchctl bootout system/com.tc.myEq.bridge 2>/dev/null || true
-stage=$(mktemp -d "$support/rollback.XXXXXX")
+mkdir -p "$support/rollback.noindex"
+stage=$(mktemp -d "$support/rollback.noindex/run.XXXXXX")
 ditto "$backup/myEq.app" "$stage/myEq.app"
 ditto "$backup/myEq.driver" "$stage/myEq.driver"
 codesign --verify --strict "$stage/myEq.app"
