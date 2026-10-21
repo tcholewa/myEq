@@ -99,13 +99,15 @@ Verified so far:
 - The Release app, driver, and helpers build and pass local signature verification. The installer expands successfully: signatures, pinned hashes, driver service declaration, embedded plists, script syntax, and fixed installation locations are verified from its payload. `pkgbuild` emits four `write: Permission denied` diagnostics while still exiting successfully; no missing or damaged signed payload was found during expansion and verification.
 - Swift formatting lint and whitespace checks pass. Source inspection finds no process-tap creation/destruction, ScreenCaptureKit, or audio-capture usage description in the shipping sources and resources.
 
-The earlier tap-backend CPU measurements above do **not** establish the new driver's CPU cost. The driver has not yet been installed or exercised through the real HAL host in this migration. No claim is made yet about absence of indicators, force-quit recovery, latency, or the 2%/6% CPU targets.
+The package was installed successfully on 2026-10-21. Installed app and driver signatures and the 0.2.0 package receipt verify. The global bridge is registered as an unprivileged `nobody` service. An installed-system XPC probe authenticated the bridge and confirmed rejection of a wrong protocol version and unauthorized app, recovery, and driver roles. This probe sends only handshake messages and does not change audio routing; reproduce with `bash scripts/test-native.sh installed-ipc` after installation.
+
+Read-only post-install discovery still lists only the physical outputs; the new driver awaits a manual macOS restart. ADAM Audio D3V remains the default media and system-sound output at 48 kHz. The driver has not yet been exercised through the real HAL host. The earlier tap-backend CPU measurements above do **not** establish its CPU cost. No claim is made yet about absence of indicators, force-quit recovery, latency, or the 2%/6% CPU targets.
 
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
 
-- Install the package, reboot, allow the recovery agent, and confirm the output-only device loads and authenticated XPC/shared-memory setup succeeds. Test wrong-version/unauthorized clients and update/rollback/uninstall.
+- Restart macOS, allow the recovery agent, and confirm the output-only device loads and valid app/driver/recovery authentication and shared-memory setup succeed. Test update/rollback/uninstall.
 - With other capture apps stopped, verify EQ playback without system-audio or microphone permission and without a myEq capture indicator. Confirm two simultaneous playback applications are mixed exactly once.
 - Verify close/reopen, minimize/restore, Hide/Unhide, Spaces, and full occlusion: audio continues, visual work stops, and fresh meters return.
 - Test volume/mute, preferred stereo channels, Flat/bypass, Botaniq1 edits, and left/right separation on built-in, USB/HDMI, and Bluetooth outputs.

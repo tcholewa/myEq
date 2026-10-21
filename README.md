@@ -53,6 +53,8 @@ xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqC
 
 The native checks exercise ring concurrency and wraparound, real Apple AUVarispeed rendering, clock drift, output-only driver properties, and recovery with mocked hardware. Audio Unit tests need access to the system Audio Unit service and may not run inside a restricted sandbox.
 
+After installation, `bash scripts/test-native.sh installed-ipc` checks the real bridge's identity and rejection of wrong-version/unauthorized clients. It sends only handshake messages and does not change audio routing.
+
 Open `myEq.xcodeproj` for editor development. `--preview` uses Botaniq1 without enabling audio or saving settings. `--diagnose` prints output-device information. See [architecture](docs/ARCHITECTURE.md) and [verification results and outstanding hardware checks](docs/VERIFICATION.md).
 
 The C++ DSP retains eight double-precision biquads, 20 ms parameter transitions, and a 1 ms lookahead limiter at −0.5 dBFS. This is a sample-peak limiter, not oversampled true-peak limiting. Hardware buffering, the shared ring, and clock conversion add latency beyond that 1 ms; the under-20-ms wired target must be measured end to end.
