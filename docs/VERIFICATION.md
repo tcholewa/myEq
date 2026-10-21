@@ -165,7 +165,7 @@ Verified on 2026-10-22:
 - Source-rendered editor/menu fixtures pass their visibility and selection assertions. Actual rendered hit regions match the editor bounds and all eight band centers in both window sizes. Initial unselected appearance was visually inspected. The selection cases include another band, a gap, the header, graph ownership, and a clipped strip behind the header.
 - The Release app and 0.3.1 package build. Expanded signatures, trust hashes, driver bridge identity, version, icon, and installation scripts verify. Swift formatting, shell syntax, and whitespace checks pass.
 
-The signed package is ready at `dist/myEq.pkg`. Installation is pending closure of the currently running app. First launch, repeated off/on cycles without Retry, and real mouse/focus behavior still need a user-assisted live check; Computer Use access to myEq remains denied.
+The 0.3.1 package was installed successfully after myEq closed. The installed app, driver, and helpers match the verified signatures/trust hashes, the receipt reports 0.3.1, and a fresh installation UUID is present. Core Audio automatically loaded the replacement stereo 48 kHz driver; physical output remained ADAM Audio D3V while the app was closed. The installed bridge probe also passes: the bridge authenticates and rejects the wrong protocol and every unauthorized role, without changing audio routing. The implementation is committed as `b392153`. First launch, repeated off/on cycles without Retry, and real mouse/focus behavior still need a user-assisted live check; Computer Use access to myEq remains denied.
 
 ## Remaining hardware acceptance checks
 
