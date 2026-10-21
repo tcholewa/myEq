@@ -107,6 +107,8 @@ The subsequent “Audio helpers are not ready” report was traced to a running 
 
 On 2026-10-21, 21 obsolete generated app bundles were removed and their Launch Services registrations cleared. The installed app, user settings, source files, and current installer were preserved. A fresh build with the revised scripts stores app products under `build/artifacts.noindex`, cleans packaging/installer staging directories automatically, and publishes only the installer in `dist`. Expanded-package signatures, pinned hashes, installation paths, shell syntax, and whitespace checks pass. After the fresh build, Spotlight and Launch Services each report only `/Applications/myEq.app`. The installed app's helper-startup error remains under investigation separately.
 
+The installed app then reproduced the helper error. Logs showed `SMAppService` status 3 (`notFound`) for the bundled recovery agent, with no registration attempt. Startup had only registered status `notRegistered`. The app now registers either initial state after checking that the bundled helper/plist exist, preserves `requiresApproval`, and repeats setup from both Retry actions. Registration failures include the actual error domain/code instead of being hidden behind an XPC connection error. The Release installer builds and its expanded signatures/pinned identities verify; Swift formatting and whitespace checks pass. Driver, bridge, and recovery-helper code hashes are unchanged, so the app update does not require reloading Core Audio. Live first-launch registration is pending installation of this fix.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

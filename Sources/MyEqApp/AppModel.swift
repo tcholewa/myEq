@@ -22,6 +22,7 @@ final class AppModel: ObservableObject {
   private var graphWork: DispatchWorkItem?
   private var notifications: [NSObjectProtocol] = []
   private var savingAllowed = true
+  private var recoverySetupIssue: String?
   let previewMode: Bool
   let isInstalledApp =
     Bundle.main.bundleURL.resolvingSymlinksInPath().path == "/Applications/myEq.app"
@@ -58,7 +59,9 @@ final class AppModel: ObservableObject {
     engine.onUpdate = { [weak self] status in
       guard let self else { return }
       var status = status
-      if let issue = self.installationIssue { status.state = .error(issue) }
+      if let issue = self.installationIssue ?? self.recoverySetupIssue {
+        status.state = .error(issue)
+      }
       let changedRate = self.engineStatus.sampleRate != status.sampleRate
       self.engineStatus = status
       if changedRate { self.refreshGraph() }
@@ -95,17 +98,56 @@ final class AppModel: ObservableObject {
         [weak self] _ in Task { @MainActor in self?.engine.setSleeping(false) }
       })
     refreshGraph()
-    if !previewMode && isInstalledApp {
-      do {
-        let service = SMAppService.agent(plistName: "com.tc.myEq.recovery.plist")
-        if service.status == .notRegistered { try service.register() }
-      } catch {
-        message =
-          "Install myEq.pkg and allow myEq in System Settings → General → Login Items & Extensions. \(error.localizedDescription)"
+    retryAudio()
+  }
+  private func prepareRecoveryAgent() -> Bool {
+    let service = SMAppService.agent(plistName: "com.tc.myEq.recovery.plist")
+    do {
+      let status = service.status
+      // On first launch macOS can report notFound even when the bundled plist exists.
+      // Checking only notRegistered silently skipped registration on this Mac.
+      if status == .notRegistered || status == .notFound {
+        let bundle = Bundle.main.bundleURL
+        guard
+          FileManager.default.fileExists(
+            atPath: bundle.appendingPathComponent(
+              "Contents/Library/LaunchAgents/com.tc.myEq.recovery.plist"
+            ).path),
+          FileManager.default.isExecutableFile(
+            atPath: bundle.appendingPathComponent("Contents/Helpers/myEqRecovery").path)
+        else {
+          throw NSError(
+            domain: "com.tc.myEq.setup", code: 1,
+            userInfo: [
+              NSLocalizedDescriptionKey: "The recovery helper is missing. Reinstall myEq.pkg."
+            ]
+          )
+        }
+        NSLog("myEq: registering recovery helper from status %ld", status.rawValue)
+        try service.register()
+        NSLog("myEq: recovery helper registration succeeded; status %ld", service.status.rawValue)
       }
-      engine.configure(
-        preset: saved.current, enabled: saved.enabled, outputUID: saved.preferredOutputUID)
+      if service.status == .requiresApproval {
+        recoverySetupIssue =
+          "Allow myEq in System Settings → General → Login Items & Extensions, then click Retry."
+      } else {
+        recoverySetupIssue = nil
+      }
+    } catch {
+      let error = error as NSError
+      recoverySetupIssue =
+        "Could not register the recovery helper: \(error.localizedDescription) (\(error.domain) \(error.code)). Click Retry to try again."
+      NSLog("myEq: recovery helper registration failed: %@", error)
     }
+    if let issue = recoverySetupIssue { engineStatus.state = .error(issue) }
+    return recoverySetupIssue == nil
+  }
+  func retryAudio() {
+    guard !previewMode, isInstalledApp else { return }
+    let ready = prepareRecoveryAgent()
+    engine.configure(
+      preset: saved.current, enabled: saved.enabled && ready, outputUID: saved.preferredOutputUID)
+    if ready { engine.retry() }
   }
   var allPresets: [EQPreset] { EQPreset.factory + saved.presets }
   var isModified: Bool { allPresets.first(where: { $0.id == saved.current.id }) != saved.current }
@@ -136,6 +178,7 @@ final class AppModel: ObservableObject {
   }
   func setEnabled(_ enabled: Bool) {
     saved.enabled = enabled
+    if enabled && !previewMode && isInstalledApp { _ = prepareRecoveryAgent() }
     changed()
   }
   func selectPreset(_ id: UUID) {
@@ -184,7 +227,8 @@ final class AppModel: ObservableObject {
     guard saved.isValid else { return }
     if !previewMode && isInstalledApp {
       engine.configure(
-        preset: saved.current, enabled: saved.enabled, outputUID: saved.preferredOutputUID)
+        preset: saved.current, enabled: saved.enabled && recoverySetupIssue == nil,
+        outputUID: saved.preferredOutputUID)
     }
     refreshGraph()
     saveWork?.cancel()

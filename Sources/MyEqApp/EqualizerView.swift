@@ -178,7 +178,7 @@ struct EqualizerView: View {
       Spacer()
       if model.installationIssue == nil {
         Button("Background Items") { model.showAudioSetup() }
-        Button("Retry") { model.engine.retry() }
+        Button("Retry") { model.retryAudio() }
       }
     }.padding(12).background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
   }

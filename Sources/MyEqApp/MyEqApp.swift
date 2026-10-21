@@ -77,7 +77,7 @@ struct MenuContent: View {
       }
     }
     if model.engineStatus.state.detail != nil && model.installationIssue == nil {
-      Button("Retry Audio") { model.engine.retry() }
+      Button("Retry Audio") { model.retryAudio() }
     }
     Divider()
     Toggle(
