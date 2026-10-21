@@ -105,6 +105,8 @@ Initial post-install discovery listed only physical outputs. On 2026-10-21, an a
 
 The subsequent “Audio helpers are not ready” report was traced to a running intermediate build at `build/Build/Products/Release/myEq.app`, confirmed by its process path and background-service logs. That copy lacks the packaged LaunchAgent; its recovery XPC lookup failed with “No such process”. The installed bundle contains the helper and its plist. An app startup guard now reports the correct installed path, disables audio/helper/login-item registration outside `/Applications/myEq.app`, and preserves editor preview mode. The guard compiles with `swift build`; Swift formatting lint and whitespace checks pass. Switching to the installed app still requires a live playback confirmation.
 
+On 2026-10-21, 21 obsolete generated app bundles were removed and their Launch Services registrations cleared. The installed app, user settings, source files, and current installer were preserved. A fresh build with the revised scripts stores app products under `build/artifacts.noindex`, cleans packaging/installer staging directories automatically, and publishes only the installer in `dist`. Expanded-package signatures, pinned hashes, installation paths, shell syntax, and whitespace checks pass. After the fresh build, Spotlight and Launch Services each report only `/Applications/myEq.app`. The installed app's helper-startup error remains under investigation separately.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

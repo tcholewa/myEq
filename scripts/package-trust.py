@@ -26,7 +26,7 @@ else:
     destination = Path(sys.argv[2])
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(plistlib.dumps({
-        "app": cdhash("dist/myEq.app"),
+        "app": cdhash(sys.argv[3]),
         "bridge": cdhash("build/native/myEqBridge"),
         "recovery": cdhash("build/native/myEqRecovery"),
     }))
