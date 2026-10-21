@@ -46,8 +46,9 @@ extern "C" MEQConnection *meq_connect(char *out,size_t size){
   }
   return c.release();
 }
-extern "C" bool meq_open_transport(MEQConnection *c,double rate,char *out,size_t size){
+extern "C" bool meq_open_transport(MEQConnection *c,double rate,const char *outputName,char *out,size_t size){
   auto m=message("open");xpc_dictionary_set_double(m,"rate",rate);
+  xpc_dictionary_set_string(m,"outputName",outputName);
   auto r=request(c->state->bridge,m);if(!succeeded(r)){copyError(out,size,error(r));return false;}
   auto mapping=std::make_shared<Mapping>();
   if(!mapping->map(xpc_dictionary_get_value(r,"memory"))||mapping->s->rate!=rate){copyError(out,size,"Invalid or incompatible driver transport.");return false;}

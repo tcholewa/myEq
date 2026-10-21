@@ -1,6 +1,20 @@
 #include "../../Driver/Driver.mm"
 #include <cassert>
 #include <iostream>
+static std::vector<std::string> nameNotifications;
+static void *pendingConfiguration=nullptr;
+static bool rejectConfiguration=false;
+static std::string readString(AudioObjectID object,AudioObjectPropertySelector selector){
+  AudioObjectPropertyAddress property{selector,kAudioObjectPropertyScopeGlobal,0};
+  UInt32 size=0;CFStringRef value=nullptr;
+  assert(propertySize(driver,object,0,&property,0,nullptr,&size)==noErr&&size==sizeof(value));
+  assert(get(driver,object,0,&property,0,nullptr,sizeof(value),&size,&value)==noErr);
+  std::string result=[(__bridge NSString*)value UTF8String];CFRelease(value);return result;
+}
+static void completeConfiguration(){
+  assert(pendingConfiguration);auto next=pendingConfiguration;pendingConfiguration=nullptr;
+  assert(perform(driver,device,1,next)==noErr);
+}
 int main(){@autoreleasepool{
   setup();UInt32 size=0;AudioObjectID objects[4]{};
   AudioObjectPropertyAddress property{kAudioDevicePropertyStreams,kAudioObjectPropertyScopeInput,0};
@@ -29,5 +43,46 @@ int main(){@autoreleasepool{
   io(driver,device,stream,1,kAudioServerPlugInIOOperationWriteMix,16,&times,samples,nullptr);
   assert(shared->s->written==48&&shared->s->discontinuities==1);
   realtime=nullptr;
-  std::cout<<"Output-only driver contract checks passed\n";
+
+  // Exercise the HAL configuration boundary and notifications, not just formatting.
+  AudioServerPlugInHostInterface mockHost{};
+  mockHost.PropertiesChanged=[](AudioServerPlugInHostRef,AudioObjectID object,UInt32 count,const AudioObjectPropertyAddress *properties)->OSStatus{
+    for(UInt32 i=0;i<count;i++)if(object==device&&properties[i].mSelector==kAudioObjectPropertyName){
+      // A host may synchronously read the new value while handling its notification.
+      nameNotifications.push_back(readString(device,kAudioObjectPropertyName));
+    }
+    return noErr;
+  };
+  mockHost.RequestDeviceConfigurationChange=[](AudioServerPlugInHostRef,AudioObjectID object,UInt64 action,void *info)->OSStatus{
+    assert(object==device&&action==1&&!pendingConfiguration);
+    if(rejectConfiguration)return kAudioHardwareIllegalOperationError;
+    pendingConfiguration=info;return noErr;
+  };
+  host=&mockHost;control=dispatch_queue_create("com.tc.myEq.driver.test",DISPATCH_QUEUE_SERIAL);
+  dispatch_queue_set_specific(control,&controlKey,&controlKey,nullptr);
+  assert(readString(device,kAudioObjectPropertyName)=="myEq");
+  configure(shared,nil,nil,nameForOutput("ADAM Audio D3V"));
+  assert(readString(device,kAudioObjectPropertyName)=="myEq"&&nameNotifications.empty());
+  completeConfiguration();
+  assert(readString(device,kAudioObjectPropertyName)=="myEq: ADAM Audio D3V");
+  assert(nameNotifications==std::vector<std::string>{"myEq: ADAM Audio D3V"});
+  assert(readString(device,kAudioDevicePropertyDeviceUID)=="com.tc.myEq.output");
+  assert(readString(device,kAudioObjectPropertyManufacturer)=="myEq");
+  assert(readString(stream,kAudioObjectPropertyName)=="System stereo mix");
+  configure(shared,nil,nil,nameForOutput("ADAM Audio D3V"));completeConfiguration();
+  assert(nameNotifications.size()==1);
+  configure(shared,nil,nil,nameForOutput("Słuchawki 🎧"));completeConfiguration();
+  assert(readString(device,kAudioObjectPropertyName)=="myEq: Słuchawki 🎧"&&nameNotifications.size()==2);
+  rejectConfiguration=true;configure(shared,nil,nil,nameForOutput("Rejected output"));rejectConfiguration=false;
+  assert(readString(device,kAudioObjectPropertyName)=="myEq: Słuchawki 🎧"&&nameNotifications.size()==2);
+  configure(shared,nil,nil,nameForOutput("Aborted output"));
+  assert(interface.AbortDeviceConfigurationChange(driver,device,1,pendingConfiguration)==noErr);pendingConfiguration=nullptr;
+  assert(readString(device,kAudioObjectPropertyName)=="myEq: Słuchawki 🎧"&&nameNotifications.size()==2);
+  configure(nullptr);completeConfiguration();
+  assert(readString(device,kAudioObjectPropertyName)=="myEq"&&nameNotifications.size()==3);
+  assert(readString(device,kAudioDevicePropertyDeviceUID)=="com.tc.myEq.output");
+  assert([nameForOutput(nullptr) isEqualToString:@"myEq"]);
+  assert([nameForOutput("") isEqualToString:@"myEq"]);
+  assert([nameForOutput("\xff") isEqualToString:@"myEq"]);
+  std::cout<<"Output-only driver and dynamic device name checks passed\n";
 }}

@@ -18,7 +18,7 @@ typedef struct {
 } MEQTransportHealth;
 // Control-thread calls only. Requests have bounded deadlines, never audio-thread IPC.
 MEQConnection * _Nullable meq_connect(char * _Nonnull error, size_t capacity);
-bool meq_open_transport(MEQConnection * _Null_unspecified, double rate, char * _Nonnull error, size_t capacity);
+bool meq_open_transport(MEQConnection * _Null_unspecified, double rate, const char * _Nonnull outputName, char * _Nonnull error, size_t capacity);
 bool meq_activate_route(MEQConnection * _Null_unspecified, const char * _Nonnull outputUID, char * _Nonnull error, size_t capacity);
 // Returns 1: healthy, 0: failure, 2: manual bypass, 3: destination disconnected.
 int meq_heartbeat(MEQConnection * _Null_unspecified, char * _Nonnull error, size_t capacity);

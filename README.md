@@ -27,7 +27,7 @@ This version replaces the process-tap backend with a virtual output and shared m
 
 ## Use
 
-1. Choose your physical speakers or headphones using **Output** in myEq, then enable EQ. myEq redirects the default media and system-sound mix through its virtual output.
+1. Choose your physical speakers or headphones using **Output** in myEq, then enable EQ. myEq redirects the default media and system-sound mix through its virtual output, named **myEq: {physical output name}** in macOS (for example, **myEq: ADAM Audio D3V**). The name follows output changes and returns to **myEq** when no session is attached.
 2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save As**.
 3. Closing or hiding the window keeps audio processing active. The menu bar provides output selection, presets, bypass, and quit. ⌘E toggles EQ; ⌘0 selects Flat in the editor.
 4. Selecting a physical output in macOS bypasses EQ. If the current destination disconnects, myEq follows an available physical fallback and resumes when supported. It does not automatically switch back when the disconnected device returns.

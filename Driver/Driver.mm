@@ -24,6 +24,8 @@ std::atomic<uint64_t> anchor{0}, seed{1};
 std::atomic<uint32_t> clients{0}, refs{1};
 double ticksPerSecond=1e9;
 std::mutex stateMutex;
+// Display metadata is protected by stateMutex and never read by the audio callback.
+NSString *deviceName=@"myEq";
 AudioServerPlugInDriverInterface interface;
 AudioServerPlugInDriverInterface *interfacePointer=&interface;
 AudioServerPlugInDriverRef driver=&interfacePointer;
@@ -42,9 +44,14 @@ struct Configuration {
   std::shared_ptr<Mapping> memory;
   xpc_connection_t peer;
   xpc_object_t request;
+  NSString *name;
 };
-void configure(std::shared_ptr<Mapping> memory,xpc_connection_t peer=nil,xpc_object_t request=nil) {
-  auto c=new Configuration{memory,peer,request};
+NSString *nameForOutput(const char *outputName){
+  NSString *name=outputName?[NSString stringWithUTF8String:outputName]:nil;
+  return name.length?[@"myEq: " stringByAppendingString:name]:@"myEq";
+}
+void configure(std::shared_ptr<Mapping> memory,xpc_connection_t peer=nil,xpc_object_t request=nil,NSString *name=@"myEq") {
+  auto c=new Configuration{memory,peer,request,name};
   setAlive(false);
   if(host->RequestDeviceConfigurationChange(host,device,1,c)!=noErr){
     if(request)reply(peer,request,"Core Audio rejected driver reconfiguration.");delete c;
@@ -71,7 +78,7 @@ void connectBridge() {
     if(op=="attach"){
       auto next=std::make_shared<Mapping>();
       if(!next->map(xpc_dictionary_get_value(m,"memory"))){reply(c,m,"Invalid shared memory.");return;}
-      configure(next,c,m);
+      configure(next,c,m,nameForOutput(xpc_dictionary_get_string(m,"outputName")));
     }else if(op=="detach"){configure(nullptr);reply(c,m);}
     else if(op=="refresh"){
       auto s=mapping?mapping->s:nullptr;
@@ -109,7 +116,7 @@ OSStatus get(AudioServerPlugInDriverRef,AudioObjectID id,pid_t,const AudioObject
     case kAudioObjectPropertyClass:return put<UInt32>(id==plugin?kAudioPlugInClassID:id==device?kAudioDeviceClassID:id==stream?kAudioStreamClassID:id==volumeControl?kAudioVolumeControlClassID:kAudioMuteControlClassID,room,size,out);
     case kAudioObjectPropertyOwner:return put<UInt32>(id==plugin?kAudioObjectUnknown:id==device?plugin:device,room,size,out);
     case kAudioObjectPropertyName: case kAudioObjectPropertyManufacturer: {
-      CFStringRef name=a->mSelector==kAudioObjectPropertyManufacturer?CFSTR("myEq"):id==stream?CFSTR("System stereo mix"):id==volumeControl?CFSTR("Output volume"):id==muteControl?CFSTR("Output mute"):CFSTR("myEq");
+      CFStringRef name=a->mSelector==kAudioObjectPropertyManufacturer?CFSTR("myEq"):id==device?(__bridge CFStringRef)deviceName:id==stream?CFSTR("System stereo mix"):id==volumeControl?CFSTR("Output volume"):id==muteControl?CFSTR("Output mute"):CFSTR("myEq");
       if(room<sizeof(name))return kAudioHardwareBadPropertySizeError;CFRetain(name);return put(name,room,size,out);
     }
     case kAudioObjectPropertyOwnedObjects:
@@ -201,12 +208,15 @@ OSStatus initialize(AudioServerPlugInDriverRef,AudioServerPlugInHostRef h){
 OSStatus perform(AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *info){
   auto c=static_cast<Configuration*>(info);
   onControl(^{
+    bool nameChanged=false;
     {std::lock_guard<std::mutex> lock(stateMutex);
       realtime.store(nullptr,std::memory_order_release);mapping=c->memory;
       if(mapping){rate=mapping->s->rate;realtime.store(mapping->s,std::memory_order_release);}
+      nameChanged=![deviceName isEqualToString:c->name];deviceName=c->name;
       anchor=mach_absolute_time();seed.fetch_add(1);clients=0;
       expectedSampleTimeValid=false;
     }
+    if(nameChanged)changed(device,{kAudioObjectPropertyName});
     changed(device,{kAudioDevicePropertyNominalSampleRate,kAudioObjectPropertyControlList});
     changed(stream,{kAudioStreamPropertyVirtualFormat,kAudioStreamPropertyPhysicalFormat});
     if(c->request)reply(c->peer,c->request);

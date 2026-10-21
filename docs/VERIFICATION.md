@@ -121,6 +121,14 @@ The installer now packages a welcome screen explaining its audio interruption an
 
 The revised Release app and product installer build successfully. Expanded payload signatures, app/bridge/recovery pinned hashes, the driver's bridge identity, exact packaged scripts, and the bundled interruption notice all verify. Both install scripts reject an alternate target before invoking system operations. Installer resolves the selected component for the startup disk and reports restart action `None`. Shell/XML syntax, Swift formatting, and whitespace checks pass. The revised package is staged at `dist/myEq.pkg`; it has not been installed over the now-active app, so its full upgrade/postinstall path still needs a live run. The same Core Audio reload operation has already succeeded manually on this Mac.
 
+The user subsequently reported “perfect” after the no-reboot driver reload and requested destination names for the virtual output. This is positive feedback on the restored setup; it does not establish the remaining CPU, indicator, or crash-recovery checks.
+
+## Virtual output destination name
+
+The virtual device now receives the selected physical output’s name through the existing transport-open/attach control messages and publishes `myEq: {original name}`. The change applies only after accepted driver reconfiguration, follows session/output changes, and resets to `myEq` on detach. Tests exercise HAL property reads and synchronous name notifications, unchanged-name suppression, Unicode, rejected/aborted configurations, detach, and stable UID/manufacturer/stream properties.
+
+The native driver, recovery, transport, and rendering suite passes. The driver tests also pass with AddressSanitizer. The Release app and installer build; expanded app/driver/helper signatures and all pinned hashes match the build artifacts, and the package contains the Core Audio reload script. Swift formatting and whitespace checks pass. The update is packaged at `dist/myEq.pkg`; installation is awaiting the user quitting the currently running app.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

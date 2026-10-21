@@ -34,7 +34,7 @@ final class VirtualOutputSession {
         connection = meq_connect($0, $1)
         return connection != nil
       }
-      try checked { meq_open_transport(connection, route.rate, $0, $1) }
+      try checked { meq_open_transport(connection, route.rate, route.name, $0, $1) }
       device = route.id
       let preferred =
         (try? HAL.ids(

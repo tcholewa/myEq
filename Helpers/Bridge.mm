@@ -31,6 +31,7 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m){
     auto next=std::make_shared<Mapping>();uint64_t generation;arc4random_buf(&generation,sizeof(generation));
     if(!next->create(rate,generation?generation:1)){reply(c,m,"Cannot allocate audio transport.");return;}
     auto attach=message("attach");xpc_dictionary_set_value(attach,"memory",next->object);
+    if(auto name=xpc_dictionary_get_string(m,"outputName"))xpc_dictionary_set_string(attach,"outputName",name);
     auto result=request(driverPeer,attach);
     if(!succeeded(result)){reply(c,m,error(result).c_str());return;}
     memory=next;appBeat=now();renderChanged=appBeat;lastRender=0;
