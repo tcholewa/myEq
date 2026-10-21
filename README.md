@@ -25,16 +25,20 @@ Launch `/Applications/myEq.app` directly after quitting other copies. Xcode's in
 
 This version replaces the process-tap backend with a virtual output and shared memory. It has no recording-input stream, process-tap calls, microphone capture, or network transport. Audio is never saved to disk. Absence of macOS capture prompts/indicators is a hardware acceptance check; see [verification status](docs/VERIFICATION.md).
 
+## Design
+
+Version 0.3.0 introduces a graphite studio interface with warm ivory type, gold controls, and color reserved for the eight bands. The editor groups the response and preamp together, adds filter-shape glyphs and width dials, and keeps stereo levels in a fixed footer. A compact layout fits the normal controls at 1040 × 740; additional notices can scroll. The app icon and menu bar symbol share the same three-fader mark.
+
 ## Use
 
 1. Choose your physical speakers or headphones using **Output** in myEq, then enable EQ. myEq redirects the default media and system-sound mix through its virtual output, named **myEq: {physical output name}** in macOS (for example, **myEq: ADAM Audio D3V**). The name follows output changes and returns to **myEq** when no session is attached.
-2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save As**.
-3. Closing or hiding the window keeps audio processing active. The menu bar provides output selection, presets, bypass, and quit. ⌘E toggles EQ; ⌘0 selects Flat in the editor.
+2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save preset**. Double-click a gain fader or width dial to reset it; exact values remain directly editable. The preset’s **…** menu contains rename, update, restore, and delete actions.
+3. Closing or hiding the window keeps audio processing active. The menu bar opens a compact panel with the destination, a static response preview, preset selection, quick Flat/Botaniq1 buttons, bypass, and **Open equalizer**. **Options** contains launch at login and Background Items. ⌘⇧E opens the editor from the panel; ⌘E toggles EQ and ⌘0 selects Flat in the editor.
 4. Selecting a physical output in macOS bypasses EQ. If the current destination disconnects, myEq follows an available physical fallback and resumes when supported. It does not automatically switch back when the disconnected device returns.
 
 Volume and mute follow the physical device where supported. Fixed-volume hardware remains fixed-volume; myEq never forces the hardware to full volume or applies the same attenuation twice. Quit eqMac before using myEq to avoid competing virtual-output routing.
 
-The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and response calculations stop.
+The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu computes a small static response; it does not enable live metering. When both surfaces are hidden, all visual calculations stop.
 
 Built-in/wired, USB/HDMI, and Bluetooth stereo routes are supported by the implementation. Bluetooth microphone use suspends EQ until stereo playback returns. AirPlay, other virtual devices, aggregates/multi-output, and surround are excluded. The virtual device follows the physical nominal sample rate from 32–192 kHz; unsupported formats remain bypassed. Applications explicitly routed to another device are outside the default mix.
 
@@ -59,11 +63,14 @@ swift test
 bash scripts/test-native.sh
 bash scripts/test-native.sh asan
 xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
+bash scripts/render-design.sh
 ```
 
 The native checks exercise ring concurrency and wraparound, real Apple AUVarispeed rendering, clock drift, output-only driver properties, and recovery with mocked hardware. Audio Unit tests need access to the system Audio Unit service and may not run inside a restricted sandbox.
 
 After installation, `bash scripts/test-native.sh installed-ipc` checks the real bridge's identity and rejection of wrong-version/unauthorized clients. It sends only handshake messages and does not change audio routing.
+
+`render-design.sh` compiles a separate offscreen preview utility against the app views and core library. It writes Retina PNGs for the editor, compact editor, and menu states to `build/artifacts.noindex/design-preview`, and asserts that hidden surfaces do not recalculate their curves. It uses synthetic levels and settings, never captures the screen, and does not enable audio or save preferences. It currently uses Xcode 27’s SwiftPM product layout.
 
 Open `myEq.xcodeproj` for editor development. `--preview` uses Botaniq1 without enabling audio or saving settings. `--diagnose` prints output-device information. See [architecture](docs/ARCHITECTURE.md) and [verification results and outstanding hardware checks](docs/VERIFICATION.md).
 

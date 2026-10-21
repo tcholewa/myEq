@@ -20,15 +20,16 @@ struct ResponseGraph: View {
           plot.minX + log(f / 20) / log(frequencyLimit / 20) * plot.width
         }
         func y(_ db: Double) -> CGFloat { plot.midY - db / 24 * plot.height / 2 }
-        for db in stride(from: -24, through: 24, by: 6) {
+        for db in stride(from: -24, through: 24, by: 12) {
           var path = Path()
           path.move(to: CGPoint(x: plot.minX, y: y(Double(db))))
           path.addLine(to: CGPoint(x: plot.maxX, y: y(Double(db))))
-          context.stroke(path, with: .color(.white.opacity(db == 0 ? 0.22 : 0.06)), lineWidth: 1)
+          context.stroke(path, with: .color(.white.opacity(db == 0 ? 0.16 : 0.045)), lineWidth: 1)
           context.draw(
             Text(db == 0 ? "0 dB" : "\(db>0 ? "+":"")\(db)").font(
               .system(size: 9, design: .monospaced)
-            ).foregroundColor(.secondary), at: CGPoint(x: plot.minX - 8, y: y(Double(db))),
+            ).foregroundColor(Studio.secondary.opacity(0.8)),
+            at: CGPoint(x: plot.minX - 8, y: y(Double(db))),
             anchor: .trailing)
         }
         for frequency in [
@@ -39,12 +40,13 @@ struct ResponseGraph: View {
           var path = Path()
           path.move(to: CGPoint(x: x(frequency), y: plot.minY))
           path.addLine(to: CGPoint(x: x(frequency), y: plot.maxY))
-          context.stroke(path, with: .color(.white.opacity(major ? 0.09 : 0.035)), lineWidth: 1)
+          context.stroke(path, with: .color(.white.opacity(major ? 0.055 : 0.018)), lineWidth: 1)
           if major {
             context.draw(
               Text(frequency >= 1000 ? "\(Int(frequency/1000))k" : "\(Int(frequency))").font(
                 .system(size: 9, design: .monospaced)
-              ).foregroundColor(.secondary), at: CGPoint(x: x(frequency), y: plot.maxY + 14))
+              ).foregroundColor(Studio.secondary.opacity(0.8)),
+              at: CGPoint(x: x(frequency), y: plot.maxY + 14))
           }
         }
         func curvePath(_ values: [Double]) -> Path {
@@ -63,24 +65,40 @@ struct ResponseGraph: View {
           fill.addLine(to: CGPoint(x: plot.maxX, y: y(0)))
           fill.addLine(to: CGPoint(x: plot.minX, y: y(0)))
           fill.closeSubpath()
-          context.fill(fill, with: .color(bandColors[index].opacity(0.07)))
+          context.fill(
+            fill,
+            with: .color(bandColors[index].opacity(index == model.selectedBand ? 0.09 : 0.035)))
           context.stroke(
             curvePath(values),
-            with: .color(bandColors[index].opacity(index == model.selectedBand ? 0.95 : 0.55)),
+            with: .color(bandColors[index].opacity(index == model.selectedBand ? 0.9 : 0.40)),
             lineWidth: index == model.selectedBand ? 1.7 : 1)
         }
         context.stroke(
-          curvePath(model.combined), with: .color(.white.opacity(0.88)),
-          style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+          curvePath(model.combined), with: .color(Studio.ink.opacity(0.95)),
+          style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
         for band in model.saved.current.bands where band.enabled {
           let point = CGPoint(
             x: x(min(band.frequency, frequencyLimit)), y: y(band.type.hasGain ? band.gain : 0))
-          let rect = CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)
-          context.fill(Path(ellipseIn: rect), with: .color(bandColors[band.id]))
-          if band.id == model.selectedBand {
+          let selected = band.id == model.selectedBand
+          let radius: CGFloat = selected ? 7 : 4
+          let rect = CGRect(
+            x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)
+          if selected {
+            var guide = Path()
+            guide.move(to: CGPoint(x: point.x, y: plot.minY))
+            guide.addLine(to: CGPoint(x: point.x, y: plot.maxY))
             context.stroke(
-              Path(ellipseIn: rect.insetBy(dx: -3, dy: -3)),
-              with: .color(bandColors[band.id].opacity(0.4)), lineWidth: 1)
+              guide, with: .color(bandColors[band.id].opacity(0.18)),
+              style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+            context.fill(
+              Path(ellipseIn: rect.insetBy(dx: -5, dy: -5)),
+              with: .color(bandColors[band.id].opacity(0.10)))
+          }
+          context.fill(Path(ellipseIn: rect), with: .color(bandColors[band.id]))
+          if selected {
+            context.draw(
+              Text("\(band.id + 1)").font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundColor(Studio.background), at: point)
           }
         }
       }

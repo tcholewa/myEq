@@ -40,11 +40,19 @@ A separate 30 Hz control-queue timer in `OutputMeterMonitor` supplies `OutputLev
 
 ## Visibility and CPU use
 
-An `NSViewRepresentable` observes only the editor's actual `NSWindow`. It combines ordered visibility, miniaturization, application hiding, and [AppKit occlusion notifications](https://developer.apple.com/documentation/appkit/nswindow/didchangeocclusionstatenotification). A partly visible editor continues updating even when another app is active; a closed, minimized, hidden, or fully occluded editor stops visual work. Menu-bar windows do not activate the observer.
+An `NSViewRepresentable` separately observes the editor and menu panel’s actual `NSWindow` objects. It combines ordered visibility, miniaturization, application hiding, and [AppKit occlusion notifications](https://developer.apple.com/documentation/appkit/nswindow/didchangeocclusionstatenotification). A partly visible editor continues updating even when another app is active; a closed, minimized, hidden, or fully occluded editor stops visual work. Only editor visibility enables DSP metering. Menu-panel visibility enables a static response preview and never enables the meter timer.
 
 Visual DSP metering defaults off. `meq_set_metering_enabled` changes an atomic epoch once per visibility transition. At the next block boundary, the audio thread chooses a compiled render path that omits output-peak accumulation, minimum-gain tracking, dB conversion, and meter publication when hidden. EQ, limiter processing, callback counters, and fault detection run in both paths. Epochs discard prior readings even if a complete hide/show cycle occurs between callbacks; an old in-flight callback cannot publish a peak accepted by the new interval.
 
 `OutputMeterMonitor` parks its timer and invalidates queued main-thread deliveries on hide or session changes. Its delivery-validation lock is used only by the control and main queues, never the real-time callback. The app also rejects meter updates while hidden, cancels pending graph work, skips graph drawing, and recalculates the response from current settings when shown. Engine snapshots are published only when user-facing status changes; callback/fault counters remain internal to the watchdog, eliminating unchanged 4 Hz editor/menu invalidations.
+
+## Editor and menu presentation
+
+The 0.3.0 interface uses a shared `Studio` palette, native SwiftUI layout, Canvas response/filter shapes, and the existing fixed-size AppKit meter. `EqualizerView` adapts graph height, fader height, and spacing below 820 points of content height, while preserving exact-value fields and all eight strips. Error messages remain in a scrollable content region; output, power, and the level footer remain fixed. No decorative animation or recurring UI timer is added.
+
+`MenuBarExtra` uses a window presentation with output selection, preset controls, a cached 128-point combined response, and an editor shortcut. `AppModel` tracks menu/editor visibility independently. Opening the panel refreshes only its curve if the editor is hidden; changes while both are hidden cancel pending graph work. Opening either surface refreshes it from current settings. Native menus are created on demand through `PopupMenuButton`: a regular SwiftUI button provides the custom label and keyboard/accessibility behavior, and an anchored `NSMenu` provides selection, checkmarks, and disabled actions. Menu item instances retain their action closures for the menu’s lifetime.
+
+A separate source-rendering utility constructs `AppModel(preview: true)`, preventing preference reads/writes, helper registration, and audio activation. Never-shown windows host fixture views for bitmap rendering. This verifies layout and visibility/model behavior without controlling the installed app; real menu interaction and window lifecycle still need a live check.
 
 ## Lifecycle and recovery
 

@@ -135,6 +135,19 @@ The installer now writes a fresh installation UUID to its trust manifest. On fir
 
 This follow-up builds and passes formatting/whitespace checks. Expanded-package verification confirms the UUID insertion preserves every signing hash. Installation succeeded, with installed app/driver/helper signatures matching the verified build and a valid fresh installation UUID present. Core Audio loaded the replacement driver automatically. The app was closed during these checks; live registration refresh and the visible destination name await reopening it.
 
+## Studio redesign (0.3.0)
+
+On 2026-10-22, the editor, menu bar panel, and app icon were redesigned together. The editor now has a graphite/ivory/gold palette, grouped response/preamp controls, eight color-coded strips with filter glyphs and width dials, and a fixed stereo-meter footer. The menu bar opens a 354-point panel with output choice, preset selection and quick presets, a static combined-response preview, preamp/sample-rate information, bypass, editor access, Options, and Quit. The smaller editor layout reduces graph/fader height and spacing to expose every normal control at 1040 × 740.
+
+Verification completed:
+
+- All **27 Swift tests pass**, covering DSP, stereo metering, hidden-state delivery invalidation, presets, and routing logic. Audio/DSP/transport behavior was not changed by this redesign.
+- `bash scripts/render-design.sh` compiles and renders six Retina fixtures: editor at 1180 × 900, compact editor at 1040 × 740, and menu states for enabled, bypassed, attention required, and long names. The layouts and generated icon were visually inspected. Native menu label adaptation initially dropped multi-line content; regular SwiftUI buttons with anchored native menus now preserve the device/preset labels and filter glyphs.
+- The same utility asserts that edits while both surfaces are hidden leave all cached curves unchanged, opening only the menu calculates its 128-point preview without refreshing the editor curves, and reopening the editor refreshes its eight curves. The menu adds no animation timer and never enables DSP metering. The existing 30 Hz native level meter remains separate from SwiftUI layout.
+- The Release app and 0.3.0 installer build. Expanded payload signatures, app/bridge/recovery trust hashes, driver bridge identity, version, generated icon, and exact installation scripts match the build artifacts. Swift formatting, shell syntax, and whitespace checks pass. The known nonfatal `pkgbuild` write diagnostics were followed by successful payload verification.
+
+These are source-rendered fixtures in never-shown windows, using synthetic settings/levels and no audio route. They do not establish live menu interaction, keyboard/VoiceOver behavior, traffic-light/title-bar placement, or actual CPU use. Computer Use access to myEq was previously denied, so those interactions require a user-assisted check. No live CPU improvement is claimed from the visual redesign.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

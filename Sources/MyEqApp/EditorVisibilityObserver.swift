@@ -1,22 +1,28 @@
 import AppKit
 import SwiftUI
 
-/// Watches only the editor's window; opening the menu bar does not enable visuals.
+/// Reports the visibility of the attached window, including occlusion and application hiding.
 struct EditorVisibilityObserver: NSViewRepresentable {
   let onChange: (Bool) -> Void
+  var onWindow: ((NSWindow) -> Void)? = nil
 
   func makeNSView(context: Context) -> VisibilityView {
     let view = VisibilityView()
     view.onChange = onChange
+    view.onWindow = onWindow
     return view
   }
 
-  func updateNSView(_ view: VisibilityView, context: Context) { view.onChange = onChange }
+  func updateNSView(_ view: VisibilityView, context: Context) {
+    view.onChange = onChange
+    view.onWindow = onWindow
+  }
 
   static func dismantleNSView(_ view: VisibilityView, coordinator: ()) { view.disconnect() }
 
   final class VisibilityView: NSView {
     var onChange: ((Bool) -> Void)?
+    var onWindow: ((NSWindow) -> Void)?
     private var lastVisible = false
     private var pendingChange: DispatchWorkItem?
 
@@ -28,6 +34,7 @@ struct EditorVisibilityObserver: NSViewRepresentable {
         report(false)
         return
       }
+      onWindow?(window)
       for name in [
         NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
         NSWindow.didDeminiaturizeNotification, NSWindow.didBecomeKeyNotification,

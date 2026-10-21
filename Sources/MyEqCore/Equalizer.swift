@@ -1,7 +1,7 @@
 import CDSP
 import Foundation
 
-public enum FilterType: Int32, Codable, CaseIterable, Identifiable {
+public enum FilterType: Int32, Codable, CaseIterable, Identifiable, Sendable {
   case bell, lowShelf, highShelf, lowCut, highCut
   public var id: Int32 { rawValue }
   public var name: String {

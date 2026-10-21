@@ -46,7 +46,7 @@ struct StereoOutputMeter: NSViewRepresentable {
 final class StereoMeterView: NSView {
   private let left = ChannelLayers(label: "L", y: 14)
   private let right = ChannelLayers(label: "R", y: 0)
-  private let guardText = meterText("Guard 0.0 dB", x: 345, y: 7, width: 95)
+  private let guardText = meterText("Limit 0.0 dB", x: 345, y: 7, width: 95)
   private var subscription: AnyCancellable?
   private weak var model: OutputMeterModel?
   private var envelope = OutputMeterEnvelope()
@@ -58,7 +58,7 @@ final class StereoMeterView: NSView {
     super.init(frame: NSRect(x: 0, y: 0, width: 440, height: 26))
     wantsLayer = true
     guard let layer else { return }
-    layer.addSublayer(meterText("Output", x: 0, y: 7, width: 40, alignment: .left))
+    layer.addSublayer(meterText("LEVEL", x: 0, y: 7, width: 40, alignment: .left))
     for channel in [left, right] {
       for child in channel.layers { layer.addSublayer(child) }
     }
@@ -88,7 +88,7 @@ final class StereoMeterView: NSView {
     let reduction = (value.reductionDB * 10).rounded() / 10
     if reduction != lastGuard {
       lastGuard = reduction
-      guardText.string = String(format: "Guard %.1f dB", reduction)
+      guardText.string = String(format: "Limit %.1f dB", reduction)
       guardText.foregroundColor = reduction > 0.1 ? NSColor.systemOrange.cgColor : meterTextColor
     }
     CATransaction.commit()
@@ -115,7 +115,7 @@ final class StereoMeterView: NSView {
   }
 }
 
-private let meterTextColor = NSColor(calibratedWhite: 0.65, alpha: 1).cgColor
+private let meterTextColor = NSColor(calibratedWhite: 0.57, alpha: 1).cgColor
 
 private func peakText(_ decibels: Double) -> String {
   decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "−∞ dBFS"
@@ -154,7 +154,9 @@ private final class ChannelLayers {
     let gradient = CAGradientLayer()
     gradient.frame = track.bounds
     gradient.colors = [
-      NSColor.systemMint.cgColor, NSColor.systemMint.cgColor, NSColor.systemYellow.cgColor,
+      NSColor(red: 0.60, green: 0.79, blue: 0.65, alpha: 1).cgColor,
+      NSColor(red: 0.60, green: 0.79, blue: 0.65, alpha: 1).cgColor,
+      NSColor(red: 0.91, green: 0.79, blue: 0.57, alpha: 1).cgColor,
       NSColor.systemOrange.cgColor, NSColor.systemRed.cgColor,
     ]
     gradient.locations = [0, 0.8, 0.9, 0.98, 1]
