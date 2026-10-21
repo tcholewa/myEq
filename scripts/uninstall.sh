@@ -20,4 +20,4 @@ launchctl bootout system/com.tc.myEq.bridge 2>/dev/null || true
 rm -rf /Applications/myEq.app /Library/Audio/Plug-Ins/HAL/myEq.driver '/Library/Application Support/myEq'
 rm -f /Library/LaunchDaemons/com.tc.myEq.bridge.plist
 pkgutil --forget com.tc.myEq.installer >/dev/null || true
-echo 'myEq removed; presets preserved. Restart macOS to unload the audio driver.'
+echo 'myEq removed; presets preserved. Reload Core Audio with sudo killall -TERM coreaudiod (brief audio interruption), or restart macOS, to unload the audio driver.'

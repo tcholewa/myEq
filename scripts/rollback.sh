@@ -30,4 +30,4 @@ cp "$backup/com.tc.myEq.bridge.plist" /Library/LaunchDaemons/
 codesign --verify --strict /Applications/myEq.app
 codesign --verify --strict /Library/Audio/Plug-Ins/HAL/myEq.driver
 launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
-echo 'Previous myEq package restored. Restart macOS before enabling EQ.'
+echo 'Previous myEq package restored. Reload Core Audio with sudo killall -TERM coreaudiod (brief audio interruption), or restart macOS, before enabling EQ.'

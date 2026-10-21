@@ -1,5 +1,9 @@
 #!/bin/bash
 set -euo pipefail
+if [ "${3:-/}" != / ]; then
+  echo "Install myEq on the current startup disk." >&2
+  exit 1
+fi
 if pgrep -x myEq >/dev/null; then
   echo "Quit myEq before installing or updating its audio components." >&2
   exit 1

@@ -8,7 +8,7 @@ public struct AudioOutput: Equatable, Identifiable {
 }
 
 public enum DriverStatus: String {
-  case missing, restartRequired, ready
+  case missing, reloadRequired, ready
 }
 
 public struct EngineSnapshot: Equatable {
@@ -159,7 +159,7 @@ public final class AudioEngine {
         driverFound
         ? .ready
         : FileManager.default.fileExists(atPath: "/Library/Audio/Plug-Ins/HAL/myEq.driver")
-          ? .restartRequired : .missing
+          ? .reloadRequired : .missing
       var manuallyBypassed = false
       if let session {
         let health = try session.heartbeat()
@@ -200,7 +200,8 @@ public final class AudioEngine {
         snapshot.state = .suspended(
           snapshot.driverStatus == .missing
             ? "Install myEq.pkg to enable the virtual output driver and audio helpers."
-            : "The driver is installed but not loaded. Restart your Mac, then Retry.")
+            : "The driver is installed but not loaded. Reload Core Audio or restart your Mac, then Retry."
+        )
         return
       }
       if sleeping {

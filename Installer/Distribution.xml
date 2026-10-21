@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>myEq</title>
+  <welcome file="Welcome.html"/>
+  <options customize="never" hostArchitectures="arm64" require-scripts="true"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <choices-outline>
+    <line choice="myEq"/>
+  </choices-outline>
+  <choice id="myEq" visible="false" title="myEq">
+    <pkg-ref id="com.tc.myEq.installer"/>
+  </choice>
+  <pkg-ref id="com.tc.myEq.installer" version="0.2.0" onConclusion="none">myEq-components.pkg</pkg-ref>
+</installer-gui-script>

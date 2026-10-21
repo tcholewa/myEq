@@ -1,5 +1,9 @@
 #!/bin/bash
 set -euo pipefail
+if [ "${3:-/}" != / ]; then
+  echo "Install myEq on the current startup disk." >&2
+  exit 1
+fi
 chown -R root:wheel /Applications/myEq.app /Library/Audio/Plug-Ins/HAL/myEq.driver '/Library/Application Support/myEq'
 chown root:wheel /Library/LaunchDaemons/com.tc.myEq.bridge.plist
 chmod 644 /Library/LaunchDaemons/com.tc.myEq.bridge.plist '/Library/Application Support/myEq/trust.plist'
@@ -7,4 +11,9 @@ chmod 755 '/Library/Application Support/myEq/myEqBridge'
 codesign --verify --strict /Applications/myEq.app
 codesign --verify --strict /Library/Audio/Plug-Ins/HAL/myEq.driver
 launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
-echo 'myEq installed. Restart macOS to load the driver, then open /Applications/myEq.app and allow its background helper.'
+# Replacing the bundle unloads its HAL host, even when its code hash is unchanged.
+# Reload only after all signed components and their bridge are in place.
+if /usr/bin/pgrep -x coreaudiod >/dev/null; then
+  /usr/bin/killall -TERM coreaudiod
+fi
+echo 'myEq installed. Core Audio was reloaded; no Mac restart is required. Open /Applications/myEq.app and allow its background helper if prompted.'

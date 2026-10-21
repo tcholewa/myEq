@@ -9,13 +9,15 @@ bash scripts/build-installer.sh
 open dist/myEq.pkg
 ```
 
-Quit myEq before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Reload Core Audio to load the new driver without rebooting:
+Quit myEq before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Its welcome screen explains that it **reloads Core Audio at the end of installation**, briefly interrupting sound in all apps, including calls and recordings. Install when that interruption is acceptable. This is needed after upgrades too: replacing the driver bundle can unload it even when the executable is unchanged. No full Mac restart is required.
+
+For an older installer, or if the driver still needs loading, reload Core Audio manually:
 
 ```sh
 sudo killall -TERM coreaudiod
 ```
 
-This briefly interrupts all system audio, including calls and recordings; run it when an interruption is acceptable. macOS relaunches the service. A full macOS restart is an alternative. Then open the installed app and allow its recovery helper in **System Settings → General → Login Items & Extensions** if requested. The build is locally ad-hoc signed; it is not notarized for distribution.
+macOS relaunches the service. A full macOS restart is an alternative. Then open the installed app and allow its recovery helper in **System Settings → General → Login Items & Extensions** if requested. The build is locally ad-hoc signed; it is not notarized for distribution.
 
 The app, bridge, and driver must come from the same package. Rebuild and reinstall after updates; the installer refreshes the trusted signing hashes. Do not replace just the app with a development build. `bash scripts/build.sh` builds app/driver artifacts without making a package or installing anything. Its app output is `build/artifacts.noindex/myEq.app`; Xcode products and temporary staging also live under `artifacts.noindex` to exclude them from Spotlight. Packaging removes temporary copies on success or failure, and `dist` contains only the current installer. The build scripts never restart Core Audio or reboot.
 
