@@ -95,6 +95,7 @@ struct EqualizerView: View {
       Toggle(
         "Enable EQ", isOn: Binding(get: { model.saved.enabled }, set: { model.setEnabled($0) })
       ).labelsHidden().toggleStyle(.switch).tint(.mint).accessibilityLabel("Enable equalizer")
+        .disabled(model.installationIssue != nil)
     }.padding(.horizontal, 26).padding(.vertical, 20)
   }
   private var presetBar: some View {
@@ -175,8 +176,10 @@ struct EqualizerView: View {
       Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
       Text(detail).font(.callout)
       Spacer()
-      Button("Background Items") { model.showAudioSetup() }
-      Button("Retry") { model.engine.retry() }
+      if model.installationIssue == nil {
+        Button("Background Items") { model.showAudioSetup() }
+        Button("Retry") { model.engine.retry() }
+      }
     }.padding(12).background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
   }
   private var presetEditor: some View {

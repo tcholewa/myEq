@@ -103,6 +103,8 @@ The package was installed successfully on 2026-10-21. Installed app and driver s
 
 Initial post-install discovery listed only physical outputs. On 2026-10-21, an administrator-authorized `killall -TERM coreaudiod` reloaded Core Audio without rebooting macOS. Subsequent `system_profiler SPAudioDataType -json` discovery enumerated **myEq**, with two output channels, virtual transport, and a 48 kHz sample rate. ADAM Audio D3V remained the default media and system-sound output. This verifies driver loading and enumeration through the real HAL host; it does not yet verify the active audio path. The earlier tap-backend CPU measurements above do **not** establish its CPU cost. No claim is made yet about absence of indicators, force-quit recovery, latency, or the 2%/6% CPU targets.
 
+The subsequent “Audio helpers are not ready” report was traced to a running intermediate build at `build/Build/Products/Release/myEq.app`, confirmed by its process path and background-service logs. That copy lacks the packaged LaunchAgent; its recovery XPC lookup failed with “No such process”. The installed bundle contains the helper and its plist. An app startup guard now reports the correct installed path, disables audio/helper/login-item registration outside `/Applications/myEq.app`, and preserves editor preview mode. The guard compiles with `swift build`; Swift formatting lint and whitespace checks pass. Switching to the installed app still requires a live playback confirmation.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

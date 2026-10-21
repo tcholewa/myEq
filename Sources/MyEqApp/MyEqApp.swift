@@ -19,7 +19,7 @@ struct MyEqApp: App {
       CommandMenu("Equalizer") {
         Button(model.saved.enabled ? "Bypass Equalizer" : "Enable Equalizer") {
           model.setEnabled(!model.saved.enabled)
-        }.keyboardShortcut("e", modifiers: [.command])
+        }.keyboardShortcut("e", modifiers: [.command]).disabled(model.installationIssue != nil)
         Button("Reset to Flat") { model.selectPreset(EQPreset.flat.id) }.keyboardShortcut(
           "0", modifiers: [.command])
       }
@@ -45,7 +45,7 @@ struct MenuContent: View {
     Divider()
     Toggle(
       "Enable Equalizer", isOn: Binding(get: { model.saved.enabled }, set: { model.setEnabled($0) })
-    )
+    ).disabled(model.installationIssue != nil)
     Button("Open Equalizer…") {
       openWindow(id: "equalizer")
       NSApp.activate(ignoringOtherApps: true)
@@ -76,11 +76,14 @@ struct MenuContent: View {
         }
       }
     }
-    if model.engineStatus.state.detail != nil { Button("Retry Audio") { model.engine.retry() } }
+    if model.engineStatus.state.detail != nil && model.installationIssue == nil {
+      Button("Retry Audio") { model.engine.retry() }
+    }
     Divider()
     Toggle(
       "Launch at Login",
-      isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+      isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) })
+    ).disabled(!model.isInstalledApp)
     Button("Quit myEq") { NSApp.terminate(nil) }.keyboardShortcut("q")
   }
 }

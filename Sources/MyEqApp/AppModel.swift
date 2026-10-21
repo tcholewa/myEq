@@ -23,6 +23,13 @@ final class AppModel: ObservableObject {
   private var notifications: [NSObjectProtocol] = []
   private var savingAllowed = true
   let previewMode: Bool
+  let isInstalledApp =
+    Bundle.main.bundleURL.resolvingSymlinksInPath().path == "/Applications/myEq.app"
+  var installationIssue: String? {
+    guard !previewMode, !isInstalledApp else { return nil }
+    return
+      "This copy is not installed. Quit it and open /Applications/myEq.app to use EQ and its audio helpers."
+  }
 
   init() {
     previewMode =
@@ -47,9 +54,11 @@ final class AppModel: ObservableObject {
     }
     saved = loaded
     message = warning
-    launchAtLogin = SMAppService.mainApp.status == .enabled
+    launchAtLogin = isInstalledApp && SMAppService.mainApp.status == .enabled
     engine.onUpdate = { [weak self] status in
       guard let self else { return }
+      var status = status
+      if let issue = self.installationIssue { status.state = .error(issue) }
       let changedRate = self.engineStatus.sampleRate != status.sampleRate
       self.engineStatus = status
       if changedRate { self.refreshGraph() }
@@ -86,7 +95,7 @@ final class AppModel: ObservableObject {
         [weak self] _ in Task { @MainActor in self?.engine.setSleeping(false) }
       })
     refreshGraph()
-    if !previewMode {
+    if !previewMode && isInstalledApp {
       do {
         let service = SMAppService.agent(plistName: "com.tc.myEq.recovery.plist")
         if service.status == .notRegistered { try service.register() }
@@ -155,6 +164,10 @@ final class AppModel: ObservableObject {
     changed()
   }
   func setLaunchAtLogin(_ value: Bool) {
+    guard isInstalledApp else {
+      message = installationIssue
+      return
+    }
     do {
       if value {
         try SMAppService.mainApp.register()
@@ -169,7 +182,7 @@ final class AppModel: ObservableObject {
   }
   private func changed() {
     guard saved.isValid else { return }
-    if !previewMode {
+    if !previewMode && isInstalledApp {
       engine.configure(
         preset: saved.current, enabled: saved.enabled, outputUID: saved.preferredOutputUID)
     }

@@ -19,6 +19,8 @@ This briefly interrupts all system audio, including calls and recordings; run it
 
 The app, bridge, and driver must come from the same package. Rebuild and reinstall after updates; the installer refreshes the trusted signing hashes. Do not replace just the app with a development build. `bash scripts/build.sh` builds app/driver artifacts without making a package or installing anything. The build scripts never restart Core Audio or reboot.
 
+Launch `/Applications/myEq.app` directly after quitting other copies. Xcode's `build/Build/Products/Release/myEq.app` is an intermediate build without the packaged helper, and a generic app-name launch can select that copy. Development copies now show the installed app's location and leave audio/helper registration disabled; `--preview` remains available for editor work.
+
 This version replaces the process-tap backend with a virtual output and shared memory. It has no recording-input stream, process-tap calls, microphone capture, or network transport. Audio is never saved to disk. Absence of macOS capture prompts/indicators is a hardware acceptance check; see [verification status](docs/VERIFICATION.md).
 
 ## Use
