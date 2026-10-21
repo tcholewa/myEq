@@ -64,6 +64,9 @@ final class CallbackTests: XCTestCase {
     XCTAssertEqual(
       (0..<256).reduce(Float(0)) { $0 + abs(output.samples[0][$1]) }, 0.3, accuracy: 1e-6)
     XCTAssertEqual(meq_meter(dsp).faults, 0)
+    let meter = meq_take_meter(dsp)
+    XCTAssertEqual(meter.peakLeft, 0.1, accuracy: 1e-6)
+    XCTAssertEqual(meter.peakRight, 0.2, accuracy: 1e-6)
   }
   func testPlanarBuffersAndSwappedOutputChannels() {
     let dsp = meq_create()!
@@ -81,6 +84,9 @@ final class CallbackTests: XCTestCase {
     invoke(dsp, input, output)
     XCTAssertEqual(output.samples[1][48], 0.1, accuracy: 1e-6)
     XCTAssertEqual(output.samples[0][48], 0.2, accuracy: 1e-6)
+    let meter = meq_take_meter(dsp)
+    XCTAssertEqual(meter.peakLeft, 0.1, accuracy: 1e-6)
+    XCTAssertEqual(meter.peakRight, 0.2, accuracy: 1e-6)
   }
   func testDormantTapIsSilenceNotFailure() {
     let dsp = meq_create()!

@@ -7,8 +7,6 @@ public struct EngineSnapshot {
   public var outputName = "System output"
   public var sampleRate: Double = 48000
   public var preamp: Double = 0
-  public var peak: Float = 0
-  public var reduction: Float = 0
   public var callbacks: UInt64 = 0
   public var faults: UInt64 = 0
   public init() {}
@@ -16,8 +14,10 @@ public struct EngineSnapshot {
 
 public final class AudioEngine {
   public var onUpdate: ((EngineSnapshot) -> Void)?
+  public var onMeter: ((OutputLevels) -> Void)?
   private let queue = DispatchQueue(label: "com.tc.myEq.audio-control", qos: .userInitiated)
   private var timer: DispatchSourceTimer?
+  private var meterTimer: DispatchSourceTimer?
   private var session: TapSession?
   private var route: OutputRoute?
   private var preset = EQPreset.flat
@@ -58,6 +58,11 @@ public final class AudioEngine {
     timer.setEventHandler { [weak self] in self?.tick() }
     timer.resume()
     self.timer = timer
+    let meterTimer = DispatchSource.makeTimerSource(queue: queue)
+    meterTimer.schedule(deadline: .distantFuture)
+    meterTimer.setEventHandler { [weak self] in self?.publishMeter() }
+    meterTimer.resume()
+    self.meterTimer = meterTimer
   }
   public func configure(preset: EQPreset, enabled: Bool) {
     guard preset.isValid else { return }
@@ -88,6 +93,8 @@ public final class AudioEngine {
       self.closing = true
       self.timer?.cancel()
       self.timer = nil
+      self.meterTimer?.cancel()
+      self.meterTimer = nil
       for (var property, block) in self.listeners {
         AudioObjectRemovePropertyListenerBlock(HAL.system, &property, self.queue, block)
       }
@@ -100,12 +107,20 @@ public final class AudioEngine {
     let value = snapshot
     DispatchQueue.main.async { [weak self] in self?.onUpdate?(value) }
   }
+  private func publishMeter() {
+    guard !closing, let session else { return }
+    let meter = meq_take_meter(session.dsp)
+    let levels = OutputLevels(
+      left: meter.peakLeft, right: meter.peakRight, reduction: meter.reduction, active: true)
+    DispatchQueue.main.async { [weak self] in self?.onMeter?(levels) }
+  }
   private func stop() {
+    let wasRunning = session != nil
+    if wasRunning { meterTimer?.schedule(deadline: .distantFuture) }
     session?.stop()
     session = nil
     applied = nil
-    snapshot.peak = 0
-    snapshot.reduction = 0
+    if wasRunning { DispatchQueue.main.async { [weak self] in self?.onMeter?(OutputLevels()) } }
   }
   private func applySettings() {
     guard applied != preset, let session, let route else { return }
@@ -160,6 +175,8 @@ public final class AudioEngine {
         let newSession = TapSession()
         try newSession.start(route: current, preset: preset, preamp: snapshot.preamp)
         session = newSession
+        meterTimer?.schedule(
+          deadline: .now(), repeating: .nanoseconds(16_666_667), leeway: .milliseconds(2))
         applied = preset
         lastCallback = 0
         callbackChangedAt = Date()
@@ -168,8 +185,6 @@ public final class AudioEngine {
       }
       guard let session else { return }
       let meter = meq_meter(session.dsp)
-      snapshot.peak = meter.peak
-      snapshot.reduction = meter.reduction
       snapshot.callbacks = meter.callbacks
       snapshot.faults = meter.faults
       if meter.callbacks != lastCallback {

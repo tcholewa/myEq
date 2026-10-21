@@ -160,25 +160,7 @@ struct EqualizerView: View {
         .caption.monospacedDigit()
       ).foregroundStyle(.secondary)
       Spacer()
-      Text("Output").font(.caption).foregroundStyle(.secondary)
-      GeometryReader { proxy in
-        Capsule().fill(.white.opacity(0.06)).overlay(alignment: .leading) {
-          Capsule().fill(Color.mint.opacity(0.8)).frame(
-            width: proxy.size.width
-              * CGFloat(
-                max(0, min(1, (20 * log10(max(Double(model.engineStatus.peak), 0.001)) + 60) / 60)))
-          )
-        }
-      }.frame(width: 90, height: 4)
-      Text(
-        model.engineStatus.peak > 0.001
-          ? String(format: "%.1f dBFS", 20 * log10(model.engineStatus.peak)) : "−∞ dBFS"
-      ).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).frame(
-        width: 70, alignment: .trailing)
-      Text(String(format: "Guard %.1f dB", model.engineStatus.reduction)).font(
-        .system(size: 10, design: .monospaced)
-      ).foregroundStyle(model.engineStatus.reduction > 0.1 ? .orange : .secondary).frame(
-        width: 95, alignment: .trailing)
+      StereoOutputMeter(model: model.outputMeter)
     }
   }
   private func statusBanner(_ detail: String) -> some View {

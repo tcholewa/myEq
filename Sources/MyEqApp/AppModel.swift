@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
   @Published var effectivePreamp = 0.0
   @Published var launchAtLogin = false
   let engine = AudioEngine()
+  let outputMeter = OutputMeterModel()
   private let store: PresetStore
   private var saveWork: DispatchWorkItem?
   private var graphWork: DispatchWorkItem?
@@ -52,6 +53,7 @@ final class AppModel: ObservableObject {
       self.engineStatus = status
       if changedRate { self.refreshGraph() }
     }
+    engine.onMeter = { [weak self] levels in self?.outputMeter.update(levels) }
     let center = NSWorkspace.shared.notificationCenter
     notifications.append(
       center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) {

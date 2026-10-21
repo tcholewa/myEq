@@ -20,6 +20,12 @@ Auto preamp searches the combined response from DC through Nyquist, adds every b
 
 The limiter has a 1 ms delay, linked left/right gain, a monotonic lookahead peak queue, a −0.5 dBFS sample ceiling, and 50 ms release. It is a sample-peak limiter, not an oversampled true-peak limiter. Its delay is in addition to Core Audio and hardware latency. All storage is allocated before audio starts; the callback does not allocate, lock, log, perform file IO, or call Swift. Telemetry atomics are asserted lock-free at compile time. Null tap data means silence; changed buffer topology and non-finite samples increment fault counters.
 
+## Stereo output metering
+
+Each callback accumulates separate left/right post-limiter sample peaks in one packed, lock-free 64-bit atomic. `meq_take_meter` atomically drains both channels together, retaining transients across all callbacks since the previous display poll. The shared gain-reduction reading also retains its maximum until consumed. `meq_meter` remains non-destructive so the health watchdog cannot steal a meter interval.
+
+A separate 60 Hz control-queue timer supplies `OutputLevels` to the main actor; the 250 ms HAL/health tick is unchanged. Meter polling is parked while capture is stopped. Bypass and suspension immediately reset display levels. `OutputMeterEnvelope` provides immediate attack and elapsed-time-based 24 dB/second decay over −60 to 0 dBFS. This display smoothing does not affect audio. A dedicated observable meter model refreshes only the stereo meter view, rather than publishing 60 Hz changes through the entire EQ editor. UI scheduling is best-effort, independent of the real-time audio deadline.
+
 ## Lifecycle and recovery
 
 The engine exposes bypassed, starting, running, suspended, and error states. Property listeners handle default-output/device-list changes and audio-service restarts; a 250 ms control tick also observes rates, formats, Bluetooth microphone activity, and telemetry. Parameter edits submit settings without re-enumerating devices.

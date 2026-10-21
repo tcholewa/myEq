@@ -11,6 +11,17 @@ namespace {
 static_assert(std::atomic<float>::is_always_lock_free && std::atomic<uint64_t>::is_always_lock_free, "Audio telemetry must be lock-free");
 constexpr int bandsCount = 8, queueSize = 16;
 constexpr double pi = 3.14159265358979323846;
+uint64_t packPeaks(float left, float right) {
+    uint32_t l, r;
+    std::memcpy(&l, &left, sizeof(l)); std::memcpy(&r, &right, sizeof(r));
+    return (uint64_t(l) << 32) | r;
+}
+std::array<float, 2> unpackPeaks(uint64_t packed) {
+    const uint32_t l = uint32_t(packed >> 32), r = uint32_t(packed);
+    std::array<float, 2> values;
+    std::memcpy(&values[0], &l, sizeof(l)); std::memcpy(&values[1], &r, sizeof(r));
+    return values;
+}
 struct Coeff { double b0=1,b1=0,b2=0,a1=0,a2=0; };
 struct State { double z1=0,z2=0; };
 struct Config { std::array<Coeff,bandsCount> coeff; double gain=1; };
@@ -81,8 +92,22 @@ struct MEQDSP {
     std::vector<double> maxima;
     std::vector<uint64_t> positions;
     MEQChannel inL{},inR{},outL{},outR{};
-    std::atomic<float> peak{0},reduction{0};
+    std::atomic<uint64_t> peaks{0};
+    std::atomic<float> reduction{0};
     std::atomic<uint64_t> callbacks{0},faults{0};
+    void publishLevels(float left, float right, double minGain) {
+        // One packed atomic gives both channels the same polling interval.
+        auto old = peaks.load(std::memory_order_relaxed);
+        for (;;) {
+            const auto previous = unpackPeaks(old);
+            const auto next = packPeaks(std::max(left, previous[0]), std::max(right, previous[1]));
+            if (peaks.compare_exchange_weak(old, next, std::memory_order_relaxed)) break;
+        }
+        const float attenuation = float(-20 * log10(std::max(minGain, 1e-20)));
+        auto oldReduction = reduction.load(std::memory_order_relaxed);
+        while (oldReduction < attenuation && !reduction.compare_exchange_weak(oldReduction, attenuation, std::memory_order_relaxed)) {}
+        callbacks.fetch_add(1, std::memory_order_relaxed);
+    }
     void begin() {
         const unsigned r=read.load(std::memory_order_relaxed),w=write.load(std::memory_order_acquire);
         if(r!=w && !fadeRemaining) {
@@ -124,7 +149,7 @@ bool meq_prepare(MEQDSP *d,double fs,const MEQBand *b,int n,double gain) {
     d->read=0;d->write=0;d->fadeRemaining=0;d->fadeLength=uint32_t(fs*.02);
     d->delay=uint32_t(ceil(fs*.001));d->release=exp(-1/(fs*.05));d->limiterGain=1;
     d->delayLine.assign(d->delay,{0,0});d->maxima.assign(d->delay+2,0);d->positions.assign(d->delay+2,0);
-    d->sequence=0;d->head=d->tail=0;d->peak=0;d->reduction=0;d->callbacks=0;d->faults=0;return true;
+    d->sequence=0;d->head=d->tail=0;d->peaks=0;d->reduction=0;d->callbacks=0;d->faults=0;return true;
 }
 bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
     if(!d||!valid(b,n,gain))return false;
@@ -135,12 +160,12 @@ bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
 void meq_layout(MEQDSP*d,MEQChannel a,MEQChannel b,MEQChannel c,MEQChannel e){d->inL=a;d->inR=b;d->outL=c;d->outR=e;}
 void meq_process(MEQDSP*d,float*s,uint32_t n) {
     if(!d||d->delayLine.empty())return;
-    d->begin();float peak=0;double minGain=1;
-    for(uint32_t i=0;i<n;++i) {double l=s[i*2],r=s[i*2+1];d->frame(l,r);s[i*2]=float(l);s[i*2+1]=float(r);peak=std::max(peak,float(std::max(std::abs(l),std::abs(r))));minGain=std::min(minGain,d->limiterGain);}
-    d->peak.store(peak,std::memory_order_relaxed);d->reduction.store(float(-20*log10(std::max(minGain,1e-20))),std::memory_order_relaxed);
-    d->callbacks.fetch_add(1,std::memory_order_relaxed);
+    d->begin();float peakLeft=0,peakRight=0;double minGain=1;
+    for(uint32_t i=0;i<n;++i) {double l=s[i*2],r=s[i*2+1];d->frame(l,r);s[i*2]=float(l);s[i*2+1]=float(r);peakLeft=std::max(peakLeft,float(std::abs(l)));peakRight=std::max(peakRight,float(std::abs(r)));minGain=std::min(minGain,d->limiterGain);}
+    d->publishLevels(peakLeft,peakRight,minGain);
 }
-MEQMeter meq_meter(MEQDSP*d){return {d->peak.load(),d->reduction.load(),d->callbacks.load(),d->faults.load()};}
+MEQMeter meq_meter(MEQDSP*d){const auto p=unpackPeaks(d->peaks.load(std::memory_order_relaxed));return {p[0],p[1],d->reduction.load(),d->callbacks.load(),d->faults.load()};}
+MEQMeter meq_take_meter(MEQDSP*d){const auto p=unpackPeaks(d->peaks.exchange(0,std::memory_order_relaxed));return {p[0],p[1],d->reduction.exchange(0),d->callbacks.load(),d->faults.load()};}
 double meq_response(const MEQBand*b,int n,double f,double fs) {
     if(!valid(b,n,0)||!std::isfinite(f)||!std::isfinite(fs)||fs<32000)return 0;
     const auto z=std::polar(1.,-2*pi*f/fs);double db=0;
@@ -167,8 +192,8 @@ OSStatus meq_audio_callback(AudioObjectID,const AudioTimeStamp*,const AudioBuffe
     // physical output clock running; absence of signal is not a callback failure.
     auto source=[in](MEQChannel c,uint32_t i,uint32_t frames){return i<frames ? static_cast<const float*>(in->mBuffers[c.buffer].mData)[i*c.stride+c.channel] : 0.f;};
     auto dest=[out](MEQChannel c,uint32_t i,double v){static_cast<float*>(out->mBuffers[c.buffer].mData)[i*c.stride+c.channel]=float(v);};
-    d->begin();float peak=0;double minGain=1;
-    for(uint32_t i=0;i<n;++i){double l=source(d->inL,i,inputL),r=source(d->inR,i,inputR);d->frame(l,r);dest(d->outL,i,l);dest(d->outR,i,r);peak=std::max(peak,float(std::max(std::abs(l),std::abs(r))));minGain=std::min(minGain,d->limiterGain);}
-    d->peak.store(peak,std::memory_order_relaxed);d->reduction.store(float(-20*log10(std::max(minGain,1e-20))),std::memory_order_relaxed);d->callbacks.fetch_add(1,std::memory_order_relaxed);return noErr;
+    d->begin();float peakLeft=0,peakRight=0;double minGain=1;
+    for(uint32_t i=0;i<n;++i){double l=source(d->inL,i,inputL),r=source(d->inR,i,inputR);d->frame(l,r);dest(d->outL,i,l);dest(d->outR,i,r);peakLeft=std::max(peakLeft,float(std::abs(l)));peakRight=std::max(peakRight,float(std::abs(r)));minGain=std::min(minGain,d->limiterGain);}
+    d->publishLevels(peakLeft,peakRight,minGain);return noErr;
 }
 }
