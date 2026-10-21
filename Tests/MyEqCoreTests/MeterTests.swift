@@ -74,8 +74,67 @@ final class MeterTests: XCTestCase {
       OutputLevels(left: .nan, right: .infinity, reduction: .nan, active: true), elapsed: .nan)
     XCTAssertEqual(meter, OutputMeterEnvelope())
     meter.update(OutputLevels(left: 0.8, right: 0.4, active: true), elapsed: 1 / 60)
-    meter.update(OutputLevels(active: true), elapsed: 10)
+    meter.update(OutputLevels(active: true), elapsed: 20)
     XCTAssertEqual(meter.leftDB, OutputMeterEnvelope.floorDB)
     XCTAssertEqual(meter.rightDB, OutputMeterEnvelope.floorDB)
+    XCTAssertEqual(meter.leftPeakDB, OutputMeterEnvelope.floorDB)
+    XCTAssertEqual(meter.rightPeakDB, OutputMeterEnvelope.floorDB)
+  }
+
+  func testPeakHoldsThenFallsUsingOnlyTimeAfterHoldExpires() {
+    var meter = OutputMeterEnvelope()
+    meter.update(OutputLevels(left: 0.5, right: 0.125, active: true), elapsed: 0)
+    let leftPeak = meter.leftPeakDB
+    let rightPeak = meter.rightPeakDB
+
+    meter.update(OutputLevels(active: true), elapsed: 0.75)
+    XCTAssertEqual(meter.leftPeakDB, leftPeak)
+    XCTAssertEqual(meter.rightPeakDB, rightPeak)
+    XCTAssertEqual(meter.leftDB, leftPeak - 18, accuracy: 1e-6)
+
+    meter.update(OutputLevels(active: true), elapsed: 0.5)
+    XCTAssertEqual(meter.leftPeakDB, leftPeak - 1.5, accuracy: 1e-6)
+    XCTAssertEqual(meter.rightPeakDB, rightPeak - 1.5, accuracy: 1e-6)
+    meter.update(OutputLevels(active: true), elapsed: 0.25)
+    XCTAssertEqual(meter.leftPeakDB, leftPeak - 3, accuracy: 1e-6)
+    XCTAssertGreaterThan(meter.leftPeakDB, meter.leftDB)
+    XCTAssertGreaterThan(meter.rightPeakDB, meter.rightDB)
+  }
+
+  func testNewPeaksRestartEachChannelHoldIndependently() {
+    var meter = OutputMeterEnvelope()
+    meter.update(OutputLevels(left: 0.25, right: 0.5, active: true), elapsed: 0)
+    let halfAmplitudeDB = meter.rightPeakDB
+    meter.update(OutputLevels(active: true), elapsed: 0.75)
+    meter.update(OutputLevels(left: 0.5, active: true), elapsed: 0.25)
+    meter.update(OutputLevels(active: true), elapsed: 0.5)
+    XCTAssertEqual(meter.leftPeakDB, halfAmplitudeDB, accuracy: 1e-6)
+    XCTAssertEqual(meter.rightPeakDB, halfAmplitudeDB - 3, accuracy: 1e-6)
+
+    meter.update(OutputLevels(right: 1, active: true), elapsed: 0.5)
+    meter.update(OutputLevels(active: true), elapsed: 0.25)
+    XCTAssertEqual(meter.leftPeakDB, halfAmplitudeDB - 1.5, accuracy: 1e-6)
+    XCTAssertEqual(meter.rightPeakDB, 0)
+  }
+
+  func testPeakDecayIsFrameRateIndependentAndIgnoresInvalidElapsedTime() {
+    var sixty = OutputMeterEnvelope()
+    sixty.update(OutputLevels(left: 0.5, right: 0.125, active: true), elapsed: 0)
+    var thirty = sixty
+    var delayed = sixty
+    let leftPeak = sixty.leftPeakDB
+    let rightPeak = sixty.rightPeakDB
+    for _ in 0..<180 { sixty.update(OutputLevels(active: true), elapsed: 1 / 60) }
+    for _ in 0..<90 { thirty.update(OutputLevels(active: true), elapsed: 1 / 30) }
+    delayed.update(OutputLevels(active: true), elapsed: 3)
+    for meter in [sixty, thirty, delayed] {
+      XCTAssertEqual(meter.leftPeakDB, leftPeak - 12, accuracy: 1e-6)
+      XCTAssertEqual(meter.rightPeakDB, rightPeak - 12, accuracy: 1e-6)
+    }
+    let before = delayed
+    for elapsed in [-1.0, .nan, .infinity] {
+      delayed.update(OutputLevels(active: true), elapsed: elapsed)
+      XCTAssertEqual(delayed, before)
+    }
   }
 }

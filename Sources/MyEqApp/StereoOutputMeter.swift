@@ -23,18 +23,20 @@ struct StereoOutputMeter: View {
     HStack(spacing: 14) {
       Text("Output").font(.caption).foregroundStyle(.secondary)
       VStack(spacing: 5) {
-        channel("L", decibels: model.envelope.leftDB)
-        channel("R", decibels: model.envelope.rightDB)
+        channel("L", decibels: model.envelope.leftDB, peakDB: model.envelope.leftPeakDB)
+        channel("R", decibels: model.envelope.rightDB, peakDB: model.envelope.rightPeakDB)
       }
       Text(String(format: "Guard %.1f dB", model.envelope.reductionDB))
         .font(.system(size: 10, design: .monospaced))
         .foregroundStyle(model.envelope.reductionDB > 0.1 ? .orange : .secondary)
         .frame(width: 95, alignment: .trailing)
     }
-    .help("Left and right output levels after EQ and peak protection, from −60 to 0 dBFS.")
+    .help(
+      "Left and right output levels after EQ and peak protection, from −60 to 0 dBFS. White peak markers hold for one second, then fall slowly."
+    )
   }
 
-  private func channel(_ label: String, decibels: Double) -> some View {
+  private func channel(_ label: String, decibels: Double, peakDB: Double) -> some View {
     HStack(spacing: 8) {
       Text(label).font(.system(size: 9, weight: .semibold, design: .monospaced))
         .foregroundStyle(.secondary).frame(width: 9)
@@ -55,6 +57,15 @@ struct StereoOutputMeter: View {
           }
         }
         .clipShape(Capsule())
+        .overlay(alignment: .leading) {
+          if peakDB > OutputMeterEnvelope.floorDB {
+            let peakFraction = (peakDB - OutputMeterEnvelope.floorDB) / -OutputMeterEnvelope.floorDB
+            RoundedRectangle(cornerRadius: 1)
+              .fill(.white)
+              .frame(width: 2, height: proxy.size.height)
+              .offset(x: max(0, min(proxy.size.width - 2, proxy.size.width * peakFraction - 1)))
+          }
+        }
       }.frame(width: 180, height: 6)
       Text(
         decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "−∞ dBFS"
@@ -65,6 +76,7 @@ struct StereoOutputMeter: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(label == "L" ? "Left output" : "Right output")
     .accessibilityValue(
-      decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "Silent")
+      (decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "Silent")
+        + (peakDB > OutputMeterEnvelope.floorDB ? String(format: ", peak %.1f dBFS", peakDB) : ""))
   }
 }

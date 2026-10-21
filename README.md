@@ -18,7 +18,7 @@ The build script creates a locally ad-hoc-signed app at `dist/myEq.app`. This is
 3. Edit numeric fields, drag gain faders, or drag graph points. Each band supports bell, shelves, and 12 dB/octave cuts. Use **Save As** for personal presets and the adjacent menu to save changes, rename, delete, or restore a preset.
 4. Closing the editor leaves audio processing running. Use the menu bar icon to reopen it, change presets, bypass, or quit. ⌘E toggles EQ; ⌘0 selects Flat when the editor is active.
 
-The output indicator has independent **L/R meters and dBFS readings**, refreshed at 60 Hz. They measure peaks after EQ and peak protection, retain short transients between display updates, and use immediate attack with a smooth 24 dB/second falloff. Bypass clears both meters. The shared Guard reading shows stereo-linked limiter activity.
+The output indicator has independent **L/R meters and dBFS readings**, refreshed at 60 Hz. They measure peaks after EQ and peak protection, retain short transients between display updates, and use immediate attack with a smooth 24 dB/second falloff. Each channel also has a white peak marker that holds for one second, then falls slowly at 6 dB/second; a new peak restarts that channel's hold. Bypass clears both meters and peak markers. The shared Guard reading shows stereo-linked limiter activity.
 
 myEq follows the macOS-selected output. When replacing eqMac, quit/bypass eqMac and select your physical output in macOS so the equalizers do not process the signal twice. myEq shows a reminder when the output name contains “eqMac”.
 
@@ -42,7 +42,7 @@ swift format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests
 
 `python3 scripts/generate-project.py` regenerates the committed Xcode wrapper after app source files are added or removed. `dist/myEq.app/Contents/MacOS/myEq --diagnose` prints read-only output-device information without enabling processing or saving settings. `--preview` opens Botaniq1 for interface development without capture or persistence.
 
-See [verification results and outstanding hardware checks](docs/VERIFICATION.md) and [architecture](docs/ARCHITECTURE.md). Eighteen tests pass; the earlier 14-test baseline also passed AddressSanitizer. The user confirmed “Equalizing, and audio plays” on this Mac; device switching, Bluetooth call transitions, long playback, and full UI interaction coverage are not yet verified on hardware.
+See [verification results and outstanding hardware checks](docs/VERIFICATION.md) and [architecture](docs/ARCHITECTURE.md). Twenty-one tests pass; the earlier 14-test baseline also passed AddressSanitizer. The user confirmed “Equalizing, and audio plays” on this Mac; device switching, Bluetooth call transitions, long playback, and full UI interaction coverage are not yet verified on hardware.
 
 ## Audio design
 
