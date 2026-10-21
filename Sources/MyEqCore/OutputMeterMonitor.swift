@@ -53,7 +53,7 @@ final class OutputMeterMonitor {
     enqueue(OutputLevels())
     if dsp != nil {
       timer.schedule(
-        deadline: .now() + .nanoseconds(16_666_667), repeating: .nanoseconds(16_666_667),
+        deadline: .now() + .nanoseconds(33_333_333), repeating: .nanoseconds(33_333_333),
         leeway: .milliseconds(2))
     }
   }
