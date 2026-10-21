@@ -18,7 +18,7 @@ The build script creates a locally ad-hoc-signed app at `dist/myEq.app`. This is
 3. Edit numeric fields, drag gain faders, or drag graph points. Each band supports bell, shelves, and 12 dB/octave cuts. Use **Save As** for personal presets and the adjacent menu to save changes, rename, delete, or restore a preset.
 4. Closing the editor leaves audio processing running. Use the menu bar icon to reopen it, change presets, bypass, or quit. ⌘E toggles EQ; ⌘0 selects Flat when the editor is active.
 
-The output indicator has independent **L/R meters and dBFS readings**, refreshed at 60 Hz. They measure peaks after EQ and peak protection, retain short transients between display updates, and use immediate attack with a smooth 24 dB/second falloff. Each channel also has a white peak marker that holds for one second, then falls slowly at 6 dB/second; a new peak restarts that channel's hold. Bypass clears both meters and peak markers. The shared Guard reading shows stereo-linked limiter activity.
+The output indicator has independent **L/R meters and dBFS readings**, refreshed at 60 Hz. They measure peaks after EQ and peak protection and retain short transients between display updates. The level bars use immediate attack with a smooth 24 dB/second falloff. Each channel's white peak marker and numeric dBFS reading hold together for one second, then fall slowly at 6 dB/second; a new peak restarts that channel's hold. Bypass clears both meters and peak readings. The shared Guard reading shows stereo-linked limiter activity.
 
 myEq follows the macOS-selected output. When replacing eqMac, quit/bypass eqMac and select your physical output in macOS so the equalizers do not process the signal twice. myEq shows a reminder when the output name contains “eqMac”.
 

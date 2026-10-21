@@ -32,7 +32,7 @@ struct StereoOutputMeter: View {
         .frame(width: 95, alignment: .trailing)
     }
     .help(
-      "Left and right output levels after EQ and peak protection, from −60 to 0 dBFS. White peak markers hold for one second, then fall slowly."
+      "Left and right output levels after EQ and peak protection, from −60 to 0 dBFS. White peak markers and dBFS readings hold for one second, then fall slowly together."
     )
   }
 
@@ -68,15 +68,14 @@ struct StereoOutputMeter: View {
         }
       }.frame(width: 180, height: 6)
       Text(
-        decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "−∞ dBFS"
+        peakDB > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", peakDB) : "−∞ dBFS"
       )
       .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
       .frame(width: 72, alignment: .trailing)
     }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(label == "L" ? "Left output" : "Right output")
+    .accessibilityLabel(label == "L" ? "Left output peak" : "Right output peak")
     .accessibilityValue(
-      (decibels > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", decibels) : "Silent")
-        + (peakDB > OutputMeterEnvelope.floorDB ? String(format: ", peak %.1f dBFS", peakDB) : ""))
+      peakDB > OutputMeterEnvelope.floorDB ? String(format: "%.1f dBFS", peakDB) : "Silent")
   }
 }

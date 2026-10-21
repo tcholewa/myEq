@@ -51,6 +51,10 @@ On 2026-10-21, `swift test` passed **21 tests** with independent peak-hold marke
 
 The Release app rebuilt and passed local signature verification; Swift formatting lint and whitespace checks passed. The marker behavior is covered by automated display-envelope tests. A live visual check remains outstanding because Computer Use access to myEq was previously denied. Quit and reopen the packaged app to load the update.
 
+## Peak dBFS readouts
+
+On 2026-10-21, the numeric L/R dBFS readouts and accessibility values were connected directly to the held-peak values used by the white markers. Both now follow the same one-second hold and 6 dB/second decay. The existing **21 tests** passed, the Release app rebuilt and passed local signature verification, and Swift formatting lint and whitespace checks passed. Live visual verification remains outstanding.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
