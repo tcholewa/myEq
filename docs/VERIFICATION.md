@@ -148,6 +148,8 @@ Verification completed:
 
 These are source-rendered fixtures in never-shown windows, using synthetic settings/levels and no audio route. They do not establish live menu interaction, keyboard/VoiceOver behavior, traffic-light/title-bar placement, or actual CPU use. Computer Use access to myEq was previously denied, so those interactions require a user-assisted check. No live CPU improvement is claimed from the visual redesign.
 
+The 0.3.0 package was installed successfully on 2026-10-22 while myEq was closed. The receipt reports version 0.3.0; installed app/driver/helper signatures and trust identities match the verified package, with a fresh installation UUID. Core Audio automatically loaded the replacement driver, enumerating a stereo 48 kHz myEq device while ordinary playback remained routed to ADAM Audio D3V. The source changes are committed as `c9e8bc3`. A user-assisted live check of the new output/preset menus, editor shortcut, and playback has been requested and is pending.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
