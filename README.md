@@ -9,7 +9,13 @@ bash scripts/build-installer.sh
 open dist/myEq.pkg
 ```
 
-Quit myEq before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Restart macOS to load the new driver, open the installed app, and allow its recovery helper in **System Settings → General → Login Items & Extensions** if requested. The build is locally ad-hoc signed; it is not notarized for distribution.
+Quit myEq before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Reload Core Audio to load the new driver without rebooting:
+
+```sh
+sudo killall -TERM coreaudiod
+```
+
+This briefly interrupts all system audio, including calls and recordings; run it when an interruption is acceptable. macOS relaunches the service. A full macOS restart is an alternative. Then open the installed app and allow its recovery helper in **System Settings → General → Login Items & Extensions** if requested. The build is locally ad-hoc signed; it is not notarized for distribution.
 
 The app, bridge, and driver must come from the same package. Rebuild and reinstall after updates; the installer refreshes the trusted signing hashes. Do not replace just the app with a development build. `bash scripts/build.sh` builds app/driver artifacts without making a package or installing anything. The build scripts never restart Core Audio or reboot.
 
@@ -40,7 +46,7 @@ sudo bash scripts/uninstall.sh
 sudo bash scripts/rollback.sh
 ```
 
-Both operations require a restart to unload/reload the driver. Personal presets under `~/Library/Application Support/myEq` are preserved. Settings version 1 migrates to version 2 without losing presets or the enable preference; version 2 adds the preferred physical output UID.
+After either operation, reload Core Audio with the command above, or restart macOS, to unload/reload the driver. Personal presets under `~/Library/Application Support/myEq` are preserved. Settings version 1 migrates to version 2 without losing presets or the enable preference; version 2 adds the preferred physical output UID.
 
 ## Development and verification
 
