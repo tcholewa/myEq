@@ -9,7 +9,7 @@ final class AppModel: ObservableObject {
   @Published var saved: SavedState
   @Published var engineStatus = EngineSnapshot()
   @Published var message: String?
-  @Published var selectedBand = 0
+  @Published var selectedBand: Int? = nil
   @Published var curves: [[Double]] = []
   @Published var combined: [Double] = []
   @Published var menuCurve: [Double] = []
@@ -190,8 +190,7 @@ final class AppModel: ObservableObject {
       recoveryReady = await prepareRecoveryAgent()
       engine.configure(
         preset: saved.current, enabled: saved.enabled && recoveryReady,
-        outputUID: saved.preferredOutputUID)
-      if recoveryReady { engine.retry() }
+        outputUID: saved.preferredOutputUID, retry: recoveryReady)
     }
   }
   var allPresets: [EQPreset] { EQPreset.factory + saved.presets }
@@ -228,7 +227,10 @@ final class AppModel: ObservableObject {
   func bandBinding<T>(_ index: Int, _ path: WritableKeyPath<EQBand, T>) -> Binding<T> {
     Binding(
       get: { self.saved.current.bands[index][keyPath: path] },
-      set: { value in self.edit { $0.bands[index][keyPath: path] = value } })
+      set: { value in
+        self.selectedBand = index
+        self.edit { $0.bands[index][keyPath: path] = value }
+      })
   }
   func setFilter(_ type: FilterType, index: Int) {
     edit {
@@ -285,7 +287,7 @@ final class AppModel: ObservableObject {
   }
   private func changed() {
     guard saved.isValid else { return }
-    if !previewMode && isInstalledApp {
+    if !previewMode && isInstalledApp && (!preparingRecovery || !saved.enabled) {
       engine.configure(
         preset: saved.current, enabled: saved.enabled && recoveryReady,
         outputUID: saved.preferredOutputUID)

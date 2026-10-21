@@ -7,11 +7,15 @@ struct EqualizerView: View {
   @State private var presetName = ""
   @State private var duplicate = true
   @State private var confirmDelete = false
+  @State private var selectionRegions: [SelectionRegion: CGRect] = [:]
 
   var body: some View {
     GeometryReader { geometry in
       editor(compact: geometry.size.height < 820)
     }
+    .coordinateSpace(name: "equalizer")
+    .onPreferenceChange(SelectionRegionsKey.self) { selectionRegions = $0 }
+    .background(BandSelectionObserver(regions: selectionRegions) { model.selectedBand = $0 })
     .frame(minWidth: 1040, minHeight: 740)
     .foregroundStyle(Studio.ink)
     .background(Studio.background)
@@ -46,7 +50,7 @@ struct EqualizerView: View {
             }
           }
         }.padding(.horizontal, 26).padding(.vertical, compact ? 8 : 20)
-      }
+      }.selectionRegion(.content)
       footer
     }
   }
@@ -139,16 +143,19 @@ struct EqualizerView: View {
           .padding(.horizontal, 6).padding(.vertical, 3)
           .overlay(Capsule().strokeBorder(Studio.line))
         Spacer()
-        let band = model.saved.current.bands[model.selectedBand]
-        Circle().fill(bandColors[band.id]).frame(width: 5, height: 5)
-        Text("Band \(band.id + 1)  ·  \(Studio.frequency(band.frequency))")
-          .font(.system(size: 10, weight: .medium, design: .monospaced))
-          .foregroundStyle(Studio.ink.opacity(0.7))
-        Rectangle().fill(Studio.line).frame(width: 1, height: 11).padding(.horizontal, 4)
+        if let selected = model.selectedBand {
+          let band = model.saved.current.bands[selected]
+          Circle().fill(bandColors[band.id]).frame(width: 5, height: 5)
+          Text("Band \(band.id + 1)  ·  \(Studio.frequency(band.frequency))")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(Studio.ink.opacity(0.7))
+          Rectangle().fill(Studio.line).frame(width: 1, height: 11).padding(.horizontal, 4)
+        }
         Capsule().fill(Studio.ink).frame(width: 14, height: 2)
         Text("Combined").font(.system(size: 10)).foregroundStyle(Studio.secondary)
       }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 10)
       ResponseGraph(model: model).frame(height: compact ? 104 : 198)
+        .selectionRegion(.graph)
         .padding(.horizontal, 12).padding(.bottom, 4)
       Rectangle().fill(Studio.line).frame(height: 1)
       preampBar

@@ -58,7 +58,7 @@ bool saveJournal(){
   NSDictionary *data=@{@"target":@(target.c_str()),@"alerts":@(oldAlerts.c_str()),@"schema":@1};
   return [data writeToFile:journal atomically:YES];
 }
-std::string activate(const std::string &destination){
+std::string activate(const std::string &destination,bool &canRetry){
   if(active)restore();
   auto selected=find(destination),virtualID=find(deviceUID);
   if(!physical(selected)||!virtualID)return "Select a connected physical audio output.";
@@ -66,7 +66,7 @@ std::string activate(const std::string &destination){
   if(oldAlerts==deviceUID)oldAlerts=target;
   if(!saveJournal())return "Cannot save the audio recovery journal. Playback was not redirected.";
   if(!connectBridge())return "The audio bridge is unavailable. Reinstall this build.";
-  auto result=request(bridge,message("activate"));if(!succeeded(result))return error(result);
+  auto result=request(bridge,message("activate"));if(!succeeded(result)){canRetry=retryable(result);return error(result);}
   // The driver publishes alive on its control queue; wait outside real-time IO.
   for(int i=0;i<100&&!live(virtualID);++i)usleep(10000);
   if(!live(virtualID)||!setDefault(kAudioHardwarePropertyDefaultOutputDevice,virtualID)||!setDefault(kAudioHardwarePropertyDefaultSystemOutputDevice,virtualID)){
@@ -105,7 +105,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         app=c;ready=true;reply(c,m);return;
       }
       auto op=string(m,"op");
-      if(op=="activate"){auto e=activate(string(m,"uid"));reply(c,m,e.c_str());}
+      if(op=="activate"){bool canRetry=false;auto e=activate(string(m,"uid"),canRetry);reply(c,m,e.c_str(),canRetry);}
       else if(op=="restore"){reason=0;restore();reply(c,m);}
       else if(op=="status"){
         auto r=xpc_dictionary_create_reply(m);xpc_dictionary_set_uint64(r,"version",protocol);

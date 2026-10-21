@@ -12,6 +12,7 @@ struct DesignPreview {
     let directory = URL(fileURLWithPath: CommandLine.arguments[1])
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let model = AppModel(preview: true)
+    verifySelection(model)
     model.saved.enabled = true
     model.engineStatus.state = .running
     model.engineStatus.outputName = "ADAM Audio D3V"
@@ -70,7 +71,52 @@ struct DesignPreview {
     )
   }
   @MainActor
+  static func verifySelection(_ model: AppModel) {
+    precondition(model.selectedBand == nil)
+    let view = BandSelectionObserver.SelectionView()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
+      styleMask: [.borderless], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    view.regions = [
+      .content: CGRect(x: 0, y: 40, width: 300, height: 220),
+      .graph: CGRect(x: 10, y: 50, width: 280, height: 60),
+      .band(0): CGRect(x: 10, y: 130, width: 80, height: 120),
+      .band(1): CGRect(x: 110, y: 130, width: 80, height: 120),
+    ]
+    view.select = { model.selectedBand = $0 }
+    view.handleClick(at: CGPoint(x: 50, y: 180), in: window)
+    precondition(model.selectedBand == 0)
+    view.handleClick(at: CGPoint(x: 150, y: 180), in: window)
+    precondition(model.selectedBand == 1)
+    view.handleClick(at: CGPoint(x: 100, y: 180), in: window)
+    precondition(model.selectedBand == nil)  // Gap between strips.
+    model.selectedBand = 1
+    view.handleClick(at: CGPoint(x: 150, y: 20), in: window)
+    precondition(model.selectedBand == nil)  // Header control.
+    model.selectedBand = 1
+    view.handleClick(at: CGPoint(x: 50, y: 80), in: window)
+    precondition(model.selectedBand == 1)  // Graph owns its node hit test.
+    view.regions[.band(1)] = CGRect(x: 110, y: 0, width: 80, height: 200)
+    view.handleClick(at: CGPoint(x: 150, y: 20), in: window)
+    precondition(model.selectedBand == nil)  // Scrolled band under the fixed header.
+    window.close()
+    print(
+      "PASS: selection starts empty, follows band clicks, and clears outside visible band controls."
+    )
+  }
+
+  @MainActor
   static func drain() { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
+
+  @MainActor
+  static func selectionObserver(in view: NSView) -> BandSelectionObserver.SelectionView? {
+    if let observer = view as? BandSelectionObserver.SelectionView { return observer }
+    for child in view.subviews {
+      if let observer = selectionObserver(in: child) { return observer }
+    }
+    return nil
+  }
 
   @MainActor
   static func render<Content: View>(

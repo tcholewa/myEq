@@ -52,6 +52,8 @@ The 0.3.0 interface uses a shared `Studio` palette, native SwiftUI layout, Canva
 
 `MenuBarExtra` uses a window presentation with output selection, preset controls, a cached 128-point combined response, and an editor shortcut. `AppModel` tracks menu/editor visibility independently. Opening the panel refreshes only its curve if the editor is hidden; changes while both are hidden cancel pending graph work. Opening either surface refreshes it from current settings. Native menus are created on demand through `PopupMenuButton`: a regular SwiftUI button provides the custom label and keyboard/accessibility behavior, and an anchored `NSMenu` provides selection, checkmarks, and disabled actions. Menu item instances retain their action closures for the menu’s lifetime.
 
+Band selection is optional and initially empty. A window-scoped local mouse-down observer uses geometry preferences for the visible scroll viewport, eight band strips, and graph. It selects a clicked band without consuming the mouse event, and clears selection/field editing for clicks elsewhere; graph node hit testing owns graph selection. The viewport check prevents a scrolled, clipped strip from intercepting header/footer clicks. The observer removes its monitor on detachment and has no polling timer.
+
 A separate source-rendering utility constructs `AppModel(preview: true)`, preventing preference reads/writes, helper registration, and audio activation. Never-shown windows host fixture views for bitmap rendering. This verifies layout and visibility/model behavior without controlling the installed app; real menu interaction and window lifecycle still need a live check.
 
 ## Lifecycle and recovery
@@ -62,7 +64,9 @@ The app and recovery agent send health checks every 250 ms. The bridge revokes t
 
 A manual media-default change bypasses and updates the app's enable preference. A destination disconnect instead allows fallback: preserve a physical destination already selected by macOS, otherwise select available built-in output, then another available physical output. This fallback is not restricted to EQ-compatible formats; ordinary playback is restored first, and EQ resumes only on a supported stereo route. The previous disconnected destination is not automatically reclaimed. Bluetooth hands-free mode remains suspended until stereo returns.
 
-Rate, buffer size, device topology, sleep/wake, and audio-service changes rebuild the session. Driver/helper failures leave ordinary playback restored and expose Retry. Visual metering remains gated independently of audio health monitoring.
+Rate, buffer size, device topology, sleep/wake, and audio-service changes rebuild the session. Driver/helper failures leave ordinary playback restored. Startup failures carry an optional `retryable` reply flag through the control protocol; timeouts, interrupted/unavailable XPC connections, pending driver/helper readiness, and aborted HAL configuration can be retried. Explicit protocol/signature/configuration failures remain terminal. The engine uses its existing 250 ms control tick for four retries after delays of 0.25, 0.5, 1, and 2 seconds, without sleeping on the main thread or adding a timer. Bypass, output changes, explicit Retry, sleep/wake, and successful startup reset the budget. Running-session failures still expose Retry instead of silently repeatedly restarting audio.
+
+Helper registration completion configures and retries the engine in one queued operation. While registration is pending, edits do not enqueue an enabled session with a false readiness flag; an explicit disable still takes effect. Session revocation sends `detach` only when it actually removes a transport, so recovery restore, app close, and subsequent disconnect events do not repeatedly enqueue HAL reconfigurations. Visual metering remains gated independently of audio health monitoring.
 
 ## Persistence, installation, and validation
 

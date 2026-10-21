@@ -24,17 +24,26 @@ final class VirtualOutputSession {
       throw AudioFailure(message: String(cString: error))
     }
   }
+  private func checkedStartup(
+    _ operation: (UnsafeMutablePointer<CChar>, Int, UnsafeMutablePointer<Bool>) -> Bool
+  ) throws {
+    var error = [CChar](repeating: 0, count: 512)
+    var retryable = false
+    guard operation(&error, error.count, &retryable) else {
+      throw AudioFailure(message: String(cString: error), retryableStartup: retryable)
+    }
+  }
   func start(route: OutputRoute, preset: EQPreset, preamp: Double) throws {
     do {
       let bands = preset.bands.map(\.native)
       guard meq_prepare(dsp, route.rate, bands, Int32(bands.count), preamp) else {
         throw AudioFailure(message: "Invalid equalizer configuration.")
       }
-      try checked {
-        connection = meq_connect($0, $1)
+      try checkedStartup {
+        connection = meq_connect($0, $1, $2)
         return connection != nil
       }
-      try checked { meq_open_transport(connection, route.rate, route.name, $0, $1) }
+      try checkedStartup { meq_open_transport(connection, route.rate, route.name, $0, $1, $2) }
       device = route.id
       let preferred =
         (try? HAL.ids(
@@ -73,7 +82,7 @@ final class VirtualOutputSession {
         if meq_transport_health(renderer).callbacks > 0 { break }
         Thread.sleep(forTimeInterval: 0.005)
       }
-      try checked { meq_activate_route(connection, route.uid, $0, $1) }
+      try checkedStartup { meq_activate_route(connection, route.uid, $0, $1, $2) }
     } catch {
       stop()
       throw error

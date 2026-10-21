@@ -9,7 +9,8 @@ std::shared_ptr<Mapping> memory;
 uint64_t appBeat=0,recoveryBeat=0,lastRender=0,renderChanged=0;
 
 void revoke(){
-  if(memory){memory->s->active=0;memory->s->deadline=0;memory.reset();}
+  if(!memory)return;
+  memory->s->active=0;memory->s->deadline=0;memory.reset();
   if(driverPeer)xpc_connection_send_message(driverPeer,message("detach"));
 }
 bool foreground(xpc_connection_t c){
@@ -22,8 +23,10 @@ void refresh(){
 void handle(xpc_connection_t c,const std::string &role,xpc_object_t m){
   auto op=string(m,"op");
   if(op=="open"&&role=="app"){
-    if(c!=appPeer||!foreground(c)||!driverPeer||!recoveryPeer||xpc_connection_get_euid(c)!=xpc_connection_get_euid(recoveryPeer)||xpc_connection_get_asid(c)!=xpc_connection_get_asid(recoveryPeer)){
-      reply(c,m,"Driver or recovery helper is not ready. Install this build and allow its background helper, then Retry.");return;
+    if(c!=appPeer||!foreground(c)){reply(c,m,"Only the active myEq app may open audio.");return;}
+    if(!driverPeer||!recoveryPeer){reply(c,m,"Waiting for the audio driver and recovery helper.",true);return;}
+    if(xpc_connection_get_euid(c)!=xpc_connection_get_euid(recoveryPeer)||xpc_connection_get_asid(c)!=xpc_connection_get_asid(recoveryPeer)){
+      reply(c,m,"The recovery helper belongs to a different login session.");return;
     }
     if(memory){reply(c,m,"An audio session is already open.");return;}
     double rate=xpc_dictionary_get_double(m,"rate");
@@ -33,7 +36,7 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m){
     auto attach=message("attach");xpc_dictionary_set_value(attach,"memory",next->object);
     if(auto name=xpc_dictionary_get_string(m,"outputName"))xpc_dictionary_set_string(attach,"outputName",name);
     auto result=request(driverPeer,attach);
-    if(!succeeded(result)){reply(c,m,error(result).c_str());return;}
+    if(!succeeded(result)){reply(c,m,error(result).c_str(),retryable(result));return;}
     memory=next;appBeat=now();renderChanged=appBeat;lastRender=0;
     auto r=xpc_dictionary_create_reply(m);xpc_dictionary_set_uint64(r,"version",protocol);
     xpc_dictionary_set_value(r,"memory",next->object);xpc_connection_send_message(c,r);return;

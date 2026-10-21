@@ -23,10 +23,11 @@ inline bool isMessage(xpc_object_t m) {
 inline std::string string(xpc_object_t m,const char *key) {
   auto s=xpc_dictionary_get_string(m,key); return s?s:"";
 }
-inline void reply(xpc_connection_t peer,xpc_object_t request,const char *error="") {
+inline void reply(xpc_connection_t peer,xpc_object_t request,const char *error="",bool retryable=false) {
   auto r=xpc_dictionary_create_reply(request); if(!r)return;
   xpc_dictionary_set_uint64(r,"version",protocol);
   xpc_dictionary_set_string(r,"error",error);
+  xpc_dictionary_set_bool(r,"retryable",retryable);
   xpc_connection_send_message(peer,r);
 }
 // Block captures own this storage even if the caller times out before XPC completes.
@@ -41,8 +42,15 @@ inline xpc_object_t request(xpc_connection_t c,xpc_object_t m,double seconds=3) 
   return r->value;
 }
 inline bool succeeded(xpc_object_t r) { return isMessage(r)&&string(r,"error").empty(); }
+inline bool retryable(xpc_object_t r) {
+  return !r || r==XPC_ERROR_CONNECTION_INTERRUPTED || r==XPC_ERROR_CONNECTION_INVALID ||
+    (isMessage(r)&&xpc_dictionary_get_bool(r,"retryable"));
+}
 inline std::string error(xpc_object_t r) {
-  if(!isMessage(r))return "Audio helper unavailable or incompatible. Install this build, then Retry.";
+  if(!r)return "The audio helper did not respond in time.";
+  if(r==XPC_ERROR_CONNECTION_INTERRUPTED||r==XPC_ERROR_CONNECTION_INVALID)return "The audio helper is starting or reconnecting.";
+  if(r==XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT)return "The audio helper does not match this app. Reinstall myEq.pkg.";
+  if(!isMessage(r))return "The audio helper protocol is incompatible. Reinstall myEq.pkg.";
   return string(r,"error");
 }
 inline void copyError(char *out,size_t n,const std::string &s) { if(out&&n)snprintf(out,n,"%s",s.c_str()); }
@@ -61,11 +69,12 @@ inline std::string requirement(NSString *role) {
 inline bool constrain(xpc_connection_t c,const std::string &req) {
   return !req.empty() && xpc_connection_set_peer_code_signing_requirement(c,req.c_str())==0;
 }
-inline bool handshake(xpc_connection_t c,const char *role) {
+inline xpc_object_t handshakeResult(xpc_connection_t c,const char *role) {
   auto h=message("hello");xpc_dictionary_set_string(h,"role",role);
-  if(!succeeded(request(c,h)))return false;
-  return succeeded(request(c,message("ready")));
+  auto r=request(c,h);if(!succeeded(r))return r;
+  return request(c,message("ready"));
 }
+inline bool handshake(xpc_connection_t c,const char *role) { return succeeded(handshakeResult(c,role)); }
 struct Mapping {
   Shared *s=nullptr; size_t size=0; xpc_object_t object;
   ~Mapping(){if(s)munmap(s,size);}

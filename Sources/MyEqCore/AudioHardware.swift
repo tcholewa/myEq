@@ -5,6 +5,7 @@ import Foundation
 
 struct AudioFailure: LocalizedError {
   let message: String
+  var retryableStartup = false
   var errorDescription: String? { message }
 }
 

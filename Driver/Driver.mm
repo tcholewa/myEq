@@ -254,7 +254,7 @@ void setup(){
     [](AudioServerPlugInDriverRef,AudioObjectID)->OSStatus{return kAudioHardwareUnsupportedOperationError;},
     [](AudioServerPlugInDriverRef,AudioObjectID,const AudioServerPlugInClientInfo*)->OSStatus{return noErr;},
     [](AudioServerPlugInDriverRef,AudioObjectID,const AudioServerPlugInClientInfo*)->OSStatus{return noErr;},perform,
-    [](AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *p)->OSStatus{auto c=static_cast<Configuration*>(p);if(c->request)reply(c->peer,c->request,"Driver configuration was aborted.");delete c;return noErr;},
+    [](AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *p)->OSStatus{auto c=static_cast<Configuration*>(p);if(c->request)reply(c->peer,c->request,"Driver configuration was aborted.",true);delete c;return noErr;},
     has,settable,propertySize,get,set,start,stop,timestamp,will,cycle,io,cycle};
 }
 }

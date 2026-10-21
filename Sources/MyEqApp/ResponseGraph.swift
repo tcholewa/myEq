@@ -114,7 +114,10 @@ struct ResponseGraph: View {
               let y = plot.midY - (band.type.hasGain ? band.gain : 0) / 24 * plot.height / 2
               return (band.id, hypot(x - gesture.startLocation.x, y - gesture.startLocation.y))
             }
-            guard let closest = candidates.min(by: { $0.1 < $1.1 }), closest.1 < 24 else { return }
+            guard let closest = candidates.min(by: { $0.1 < $1.1 }), closest.1 < 24 else {
+              model.selectedBand = nil
+              return
+            }
             dragging = closest.0
             model.selectedBand = closest.0
           }

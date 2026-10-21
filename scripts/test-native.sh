@@ -13,6 +13,8 @@ if [ "${1:-}" = "asan" ]; then common+=(-fsanitize=address -fno-omit-frame-point
 xcrun clang++ "${common[@]}" Tests/Native/TransportTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/transport
 xcrun clang++ "${common[@]}" Tests/Native/DriverTests.mm -framework Foundation -framework CoreAudio -o build/native-tests/driver
 xcrun clang++ "${common[@]}" Tests/Native/RecoveryTests.mm -framework Foundation -framework CoreAudio -framework AppKit -framework SystemConfiguration -o build/native-tests/recovery
+xcrun clang++ "${common[@]}" Tests/Native/BridgeLifecycleTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/bridge-lifecycle
+build/native-tests/bridge-lifecycle
 build/native-tests/driver
 build/native-tests/recovery
 build/native-tests/transport

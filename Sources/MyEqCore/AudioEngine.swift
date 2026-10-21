@@ -37,6 +37,7 @@ public final class AudioEngine {
   private var applied: EQPreset?
   private var enabled = false
   private var sleeping = false
+  private var startupRetry = StartupRetry()
   private var blocked = false
   private var closing = false
   private var snapshot = EngineSnapshot()
@@ -61,6 +62,7 @@ public final class AudioEngine {
           self.stop()
           self.route = nil
           self.blocked = false
+          self.startupRetry.reset()
         }
         self.tick()
       }
@@ -74,22 +76,21 @@ public final class AudioEngine {
     timer.resume()
     self.timer = timer
   }
-  public func configure(preset: EQPreset, enabled: Bool, outputUID: String? = nil) {
+  public func configure(
+    preset: EQPreset, enabled: Bool, outputUID: String? = nil, retry: Bool = false
+  ) {
     guard preset.isValid else { return }
     queue.async { [weak self] in
       guard let self, !self.closing else { return }
       let toggled = self.enabled != enabled || self.preferredOutputUID != outputUID
       self.preferredOutputUID = outputUID
-      if toggled { self.blocked = false }
+      if toggled || retry {
+        self.blocked = false
+        self.startupRetry.reset()
+      }
       self.preset = preset
       self.enabled = enabled
-      if toggled { self.tick() } else { self.applySettings() }
-    }
-  }
-  public func retry() {
-    queue.async { [weak self] in
-      self?.blocked = false
-      self?.tick()
+      if toggled || retry { self.tick() } else { self.applySettings() }
     }
   }
   public func setEditorVisible(_ visible: Bool) {
@@ -102,6 +103,7 @@ public final class AudioEngine {
     queue.async { [weak self] in
       self?.sleeping = sleeping
       self?.blocked = false
+      self?.startupRetry.reset()
       self?.tick()
     }
   }
@@ -146,6 +148,7 @@ public final class AudioEngine {
   private func tick() {
     guard !closing else { return }
     defer { publish() }
+    var startingSession = false
     do {
       let all = OutputRoute.all()
       snapshot.outputs = all.filter { $0.channels.reduce(0, +) == 2 }.map {
@@ -187,10 +190,12 @@ public final class AudioEngine {
         stop()
         route = current
         blocked = false
+        startupRetry.reset()
       }
       snapshot.outputName = current?.name ?? "No output connected"
       snapshot.sampleRate = current?.rate ?? 48000
       if !enabled {
+        startupRetry.reset()
         stop()
         snapshot.state = .bypassed
         return
@@ -221,6 +226,8 @@ public final class AudioEngine {
       }
       guard !blocked else { return }
       if session == nil {
+        guard startupRetry.isReady(at: ProcessInfo.processInfo.systemUptime) else { return }
+        startingSession = true
         snapshot.state = .starting
         publish()
         snapshot.preamp =
@@ -229,6 +236,7 @@ public final class AudioEngine {
         let newSession = VirtualOutputSession()
         try newSession.start(route: current, preset: preset, preamp: snapshot.preamp)
         session = newSession
+        startupRetry.reset()
         meterMonitor?.setDSP(newSession.dsp)
         applied = preset
       } else {
@@ -245,8 +253,17 @@ public final class AudioEngine {
       snapshot.state = .running
     } catch {
       stop()
-      blocked = true
-      snapshot.state = .error(error.localizedDescription)
+      if startingSession
+        && startupRetry.schedule(for: error, at: ProcessInfo.processInfo.systemUptime)
+      {
+        // Keep the UI in Starting while launchd/driver connections settle. No extra timer.
+        snapshot.state = .starting
+        NSLog("myEq: retrying audio startup: %@", error.localizedDescription)
+      } else {
+        blocked = true
+        snapshot.state = .error(error.localizedDescription)
+        NSLog("myEq: audio startup/session failed: %@", error.localizedDescription)
+      }
     }
   }
   public static func diagnostics() -> String {
@@ -257,5 +274,22 @@ public final class AudioEngine {
       return
         "Backend: virtual output / shared memory\nOutput: \(route.name)\nSample rate: \(route.rate) Hz\nChannels: \(route.channels)\nFormat supported: \(route.supportedFormat)\nStatus: \(route.suspension ?? "Ready")"
     } catch { return error.localizedDescription }
+  }
+}
+
+/// Bounded control-queue backoff; never retries permanently invalid configuration or identity.
+struct StartupRetry {
+  private var attempt = 0
+  private var nextAttempt: TimeInterval = 0
+  mutating func reset() {
+    attempt = 0
+    nextAttempt = 0
+  }
+  func isReady(at time: TimeInterval) -> Bool { time >= nextAttempt }
+  mutating func schedule(for error: Error, at time: TimeInterval) -> Bool {
+    guard (error as? AudioFailure)?.retryableStartup == true, attempt < 4 else { return false }
+    nextAttempt = time + 0.25 * pow(2, Double(attempt))
+    attempt += 1
+    return true
   }
 }

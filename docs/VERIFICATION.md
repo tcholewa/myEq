@@ -150,6 +150,23 @@ These are source-rendered fixtures in never-shown windows, using synthetic setti
 
 The 0.3.0 package was installed successfully on 2026-10-22 while myEq was closed. The receipt reports version 0.3.0; installed app/driver/helper signatures and trust identities match the verified package, with a fresh installation UUID. Core Audio automatically loaded the replacement driver, enumerating a stereo 48 kHz myEq device while ordinary playback remained routed to ADAM Audio D3V. The source changes are committed as `c9e8bc3`. A user-assisted live check of the new output/preset menus, editor shortcut, and playback has been requested and is pending.
 
+## Helper startup and band selection fixes (0.3.1)
+
+The user reported helper errors after first launch and after bypass/re-enable, cleared by Retry. Recent system logs show repeated helper reconnections and an interrupted bridge connection during a bridge restart. The old engine latched every startup failure until explicit Retry; helper registration also issued separate configure/retry operations. Separately, recovery restore, app close, and disconnect cleanup could each send driver detach even after the transport had already been revoked. These are confirmed code paths; the logs do not identify every individual failed enable attempt’s original error.
+
+Temporary startup failures now retain their classification and detailed service error through XPC and the C/Swift boundary. The engine stays in Starting and permits four delayed reconnection attempts on its existing control tick. Explicit protocol/signature/configuration failures do not use this retry path. Disable and successful startup clear the pending retry budget. Registration completion submits one engine configure/retry operation, and pending registration no longer queues a spurious enabled configuration with false readiness. Bridge revocation emits only one detach per transport. No code-signing, active-user/session, or single-owner checks were removed.
+
+Band selection now starts empty. A local event observer scoped to the editor selects a strip on mouse-down, clears selection and text-field focus outside band controls, and preserves original events for the controls. Graph node hit tests retain selection while dragging; blank graph space clears it. Clipped/scrolled strips cannot claim clicks in the fixed header/footer.
+
+Verified on 2026-10-22:
+
+- **30 Swift tests pass**, including new bounded-backoff, reset/cancellation, and permanent-error cases.
+- The complete native suite passes normally and with AddressSanitizer. New isolated bridge tests cover exactly one detach per transport across repeated cleanup and distinguish transient XPC failures from protocol/signature rejection.
+- Source-rendered editor/menu fixtures pass their visibility and selection assertions. Actual rendered hit regions match the editor bounds and all eight band centers in both window sizes. Initial unselected appearance was visually inspected. The selection cases include another band, a gap, the header, graph ownership, and a clipped strip behind the header.
+- The Release app and 0.3.1 package build. Expanded signatures, trust hashes, driver bridge identity, version, icon, and installation scripts verify. Swift formatting, shell syntax, and whitespace checks pass.
+
+The signed package is ready at `dist/myEq.pkg`. Installation is pending closure of the currently running app. First launch, repeated off/on cycles without Retry, and real mouse/focus behavior still need a user-assisted live check; Computer Use access to myEq remains denied.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

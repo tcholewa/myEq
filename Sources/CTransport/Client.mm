@@ -32,7 +32,8 @@ struct MEQRenderer {
   std::array<float,8192> leftSamples{},rightSamples{};
   ~MEQRenderer(){if(converter){AudioUnitUninitialize(converter);AudioComponentInstanceDispose(converter);}}
 };
-extern "C" MEQConnection *meq_connect(char *out,size_t size){
+extern "C" MEQConnection *meq_connect(char *out,size_t size,bool *canRetry){
+  *canRetry=false;
   auto c=std::make_unique<MEQConnection>();
   auto q=dispatch_queue_create("com.tc.myEq.ipc",DISPATCH_QUEUE_SERIAL);
   std::weak_ptr<ClientState> weak=c->state;
@@ -42,21 +43,28 @@ extern "C" MEQConnection *meq_connect(char *out,size_t size){
     if(i)c->state->bridge=peer;else c->state->recovery=peer;
     xpc_connection_set_event_handler(peer,^(xpc_object_t event){if(xpc_get_type(event)==XPC_TYPE_ERROR)if(auto s=weak.lock())s->connected=false;});
     xpc_connection_resume(peer);
-    if(!handshake(peer,"app")){copyError(out,size,"Audio helpers are not ready. Install this build and allow myEq's background helper, then Retry.");return nullptr;}
+    auto result=handshakeResult(peer,"app");
+    if(!succeeded(result)){
+      *canRetry=retryable(result);
+      auto detail=std::string(i?"Audio bridge: ":"Recovery helper: ")+error(result);
+      NSLog(@"myEq: connection failed: %s",detail.c_str());copyError(out,size,detail);return nullptr;
+    }
   }
   return c.release();
 }
-extern "C" bool meq_open_transport(MEQConnection *c,double rate,const char *outputName,char *out,size_t size){
+extern "C" bool meq_open_transport(MEQConnection *c,double rate,const char *outputName,char *out,size_t size,bool *canRetry){
+  *canRetry=false;
   auto m=message("open");xpc_dictionary_set_double(m,"rate",rate);
   xpc_dictionary_set_string(m,"outputName",outputName);
-  auto r=request(c->state->bridge,m);if(!succeeded(r)){copyError(out,size,error(r));return false;}
+  auto r=request(c->state->bridge,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}
   auto mapping=std::make_shared<Mapping>();
   if(!mapping->map(xpc_dictionary_get_value(r,"memory"))||mapping->s->rate!=rate){copyError(out,size,"Invalid or incompatible driver transport.");return false;}
   c->memory=mapping;c->volumeSequence=0;return true;
 }
-extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,size_t size){
+extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,size_t size,bool *canRetry){
+  *canRetry=false;
   auto m=message("activate");xpc_dictionary_set_string(m,"uid",uid);
-  auto r=request(c->state->recovery,m);if(!succeeded(r)){copyError(out,size,error(r));return false;}return true;
+  auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
 extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size){
   if(!c||!c->state->connected){copyError(out,size,"Audio helper connection was lost. Retry to reconnect.");return 0;}

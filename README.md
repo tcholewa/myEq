@@ -32,7 +32,7 @@ Version 0.3.0 introduces a graphite studio interface with warm ivory type, gold 
 ## Use
 
 1. Choose your physical speakers or headphones using **Output** in myEq, then enable EQ. myEq redirects the default media and system-sound mix through its virtual output, named **myEq: {physical output name}** in macOS (for example, **myEq: ADAM Audio D3V**). The name follows output changes and returns to **myEq** when no session is attached.
-2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save preset**. Double-click a gain fader or width dial to reset it; exact values remain directly editable. The preset’s **…** menu contains rename, update, restore, and delete actions.
+2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save preset**. The editor starts with no band selected; clicking outside a band clears its highlight and field focus. Double-click a gain fader or width dial to reset it; exact values remain directly editable. The preset’s **…** menu contains rename, update, restore, and delete actions.
 3. Closing or hiding the window keeps audio processing active. The menu bar opens a compact panel with the destination, a static response preview, preset selection, quick Flat/Botaniq1 buttons, bypass, and **Open equalizer**. **Options** contains launch at login and Background Items. ⌘⇧E opens the editor from the panel; ⌘E toggles EQ and ⌘0 selects Flat in the editor.
 4. Selecting a physical output in macOS bypasses EQ. If the current destination disconnects, myEq follows an available physical fallback and resumes when supported. It does not automatically switch back when the disconnected device returns.
 
@@ -43,6 +43,8 @@ The independent L/R output meters refresh at **30 Hz**, retain short transients,
 Built-in/wired, USB/HDMI, and Bluetooth stereo routes are supported by the implementation. Bluetooth microphone use suspends EQ until stereo playback returns. AirPlay, other virtual devices, aggregates/multi-output, and surround are excluded. The virtual device follows the physical nominal sample rate from 32–192 kHz; unsupported formats remain bypassed. Applications explicitly routed to another device are outside the default mix.
 
 ## Recovery and removal
+
+Temporary helper/driver startup failures reconnect automatically with up to four delayed retries. EQ remains in **Starting** while those connections settle; disabling EQ cancels the pending retries. Permanent setup errors and exhausted retries still show the specific error and a Retry action.
 
 An independent per-user recovery agent owns output routing. It records routing metadata before changes and restores ordinary playback after quit, bypass, helper disconnect, or a stalled app. A bounded driver lease makes the virtual device unavailable if its helpers disappear. Recovery only changes defaults still pointing at myEq; it preserves subsequent manual selections. Recovery timing and crash behavior still need the live acceptance checks documented below.
 

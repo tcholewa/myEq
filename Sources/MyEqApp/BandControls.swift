@@ -105,7 +105,7 @@ struct BandStrip: View {
     }
     .opacity(band.enabled ? 1 : 0.5)
     .onHover { hovering = $0 }
-    .simultaneousGesture(TapGesture().onEnded { model.selectedBand = index })
+    .selectionRegion(.band(index))
     .frame(maxWidth: .infinity)
     .contextMenu {
       Button("Reset gain to 0 dB") { model.edit { $0.bands[index].gain = 0 } }
