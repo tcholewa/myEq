@@ -66,6 +66,8 @@ bash scripts/test-native.sh
 bash scripts/test-native.sh asan
 xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
 bash scripts/render-design.sh
+# After building the installer:
+python3 scripts/verify-installer.py
 ```
 
 The native checks exercise ring concurrency and wraparound, real Apple AUVarispeed rendering, clock drift, output-only driver properties, and recovery with mocked hardware. Audio Unit tests need access to the system Audio Unit service and may not run inside a restricted sandbox.

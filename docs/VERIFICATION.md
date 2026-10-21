@@ -167,6 +167,12 @@ Verified on 2026-10-22:
 
 The 0.3.1 package was installed successfully after myEq closed. The installed app, driver, and helpers match the verified signatures/trust hashes, the receipt reports 0.3.1, and a fresh installation UUID is present. Core Audio automatically loaded the replacement stereo 48 kHz driver; physical output remained ADAM Audio D3V while the app was closed. The installed bridge probe also passes: the bridge authenticates and rejects the wrong protocol and every unauthorized role, without changing audio routing. The implementation is committed as `b392153`. First launch, repeated off/on cycles without Retry, and real mouse/focus behavior still need a user-assisted live check; Computer Use access to myEq remains denied.
 
+## Recovery helper launch constraint (0.3.2)
+
+The user-assisted 0.3.1 launch failed before the helper could run. At 00:40:55, launchd reported a spawn constraint mismatch (`c[5]p[1]m[1]e[0]`) for the installed recovery executable. Background Task Management then invalidated the item; subsequent attempts reported `EX_CONFIG` and an unresolved relative program path. The installed executable exists and its signature matches the package/trust manifest. Thus missing files and transient XPC startup were not the cause of this particular failure. The cached registration survived unregister/register with an obsolete inferred ad-hoc constraint.
+
+The 0.3.2 package generates an explicit recovery `SpawnConstraint` from the already signed embedded executable, before signing the enclosing app. It keeps the existing identifier, service name, registration/approval flow, and all XPC checks. Package verification now has a checked-in script that validates the exact launch constraint as well as signatures, trust identities, versions, icon, and install scripts. Live registration with the revised constraint remains to be checked after installation.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

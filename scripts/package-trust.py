@@ -22,6 +22,17 @@ if sys.argv[1] == "components":
 elif sys.argv[1] == "driver":
     destination = Path("build/native/myEq.driver/Contents/Resources/BridgeTrust.plist")
     destination.write_bytes(plistlib.dumps({"bridge": cdhash("build/native/myEqBridge")}))
+elif sys.argv[1] == "agent":
+    # SMAppService can retain an inferred ad-hoc requirement across upgrades.
+    # Publish this build's exact identity in the signed registration plist so
+    # launchd receives an explicit, current constraint instead of that cache.
+    destination = Path(sys.argv[2])
+    agent = plistlib.loads(Path("Resources/com.tc.myEq.recovery.plist").read_bytes())
+    agent["SpawnConstraint"] = {
+        "signing-identifier": "com.tc.myEq.recovery",
+        "cdhash": bytes.fromhex(cdhash(sys.argv[3])),
+    }
+    destination.write_bytes(plistlib.dumps(agent))
 else:
     destination = Path(sys.argv[2])
     destination.parent.mkdir(parents=True, exist_ok=True)

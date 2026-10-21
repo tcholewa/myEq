@@ -21,7 +21,7 @@ ditto "$artifacts/xcode/Build/Products/Release/myEq.app" "$package_dir/myEq.app"
 mkdir -p "$package_dir/myEq.app/Contents/Resources"
 mkdir -p "$package_dir/myEq.app/Contents/Helpers" "$package_dir/myEq.app/Contents/Library/LaunchAgents"
 cp build/native/myEqRecovery "$package_dir/myEq.app/Contents/Helpers/"
-cp Resources/com.tc.myEq.recovery.plist "$package_dir/myEq.app/Contents/Library/LaunchAgents/"
+python3 scripts/package-trust.py agent "$package_dir/myEq.app/Contents/Library/LaunchAgents/com.tc.myEq.recovery.plist" "$package_dir/myEq.app/Contents/Helpers/myEqRecovery"
 swift scripts/icon.swift build/AppIcon.iconset
 cp build/AppIcon.icns "$package_dir/myEq.app/Contents/Resources/AppIcon.icns"
 codesign --force --sign - --options runtime "$package_dir/myEq.app"
