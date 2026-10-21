@@ -18,6 +18,9 @@ bool meq_prepare(MEQDSP *_Null_unspecified , double rate, const MEQBand *_Null_u
 bool meq_submit(MEQDSP *_Null_unspecified , const MEQBand *_Null_unspecified , int count, double preamp);
 void meq_layout(MEQDSP *_Null_unspecified , MEQChannel inL, MEQChannel inR, MEQChannel outL, MEQChannel outR);
 void meq_process(MEQDSP *_Null_unspecified , float *_Null_unspecified interleavedStereo, uint32_t frames);
+// Visual metering defaults off. Safe from the single control/meter-consumer thread
+// while audio runs; EQ, limiting, and health counters always continue.
+void meq_set_metering_enabled(MEQDSP *_Null_unspecified , bool enabled);
 MEQMeter meq_meter(MEQDSP *_Null_unspecified );
 // Single meter consumer: atomically drain stereo peaks since the previous read.
 // Health/statistics readers use meq_meter instead, which does not drain peaks.

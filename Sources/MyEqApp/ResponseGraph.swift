@@ -15,6 +15,7 @@ struct ResponseGraph: View {
         x: left, y: top, width: proxy.size.width - left - right,
         height: proxy.size.height - top - bottom)
       Canvas { context, _ in
+        guard model.isEditorVisible else { return }
         func x(_ f: Double) -> CGFloat {
           plot.minX + log(f / 20) / log(frequencyLimit / 20) * plot.width
         }

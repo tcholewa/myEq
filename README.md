@@ -20,6 +20,8 @@ The build script creates a locally ad-hoc-signed app at `dist/myEq.app`. This is
 
 The output indicator has independent **L/R meters and dBFS readings**, refreshed at 60 Hz. They measure peaks after EQ and peak protection and retain short transients between display updates. The level bars use immediate attack with a smooth 24 dB/second falloff. Each channel's white peak marker and numeric dBFS reading hold together for one second, then fall slowly at 6 dB/second; a new peak restarts that channel's hold. Bypass clears both meters and peak readings. The shared Guard reading shows stereo-linked limiter activity.
 
+Visual work pauses when the EQ window is closed, minimized, hidden, or fully covered. Meter polling, peak/Guard measurement, and response-graph calculations stop; EQ, peak protection, and audio health monitoring continue. Reopening the editor resumes fresh meter readings and refreshes the graph with the latest settings. Opening just the menu bar does not restart visual processing.
+
 myEq follows the macOS-selected output. When replacing eqMac, quit/bypass eqMac and select your physical output in macOS so the equalizers do not process the signal twice. myEq shows a reminder when the output name contains “eqMac”.
 
 ## Audio behavior
@@ -42,7 +44,7 @@ swift format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests
 
 `python3 scripts/generate-project.py` regenerates the committed Xcode wrapper after app source files are added or removed. `dist/myEq.app/Contents/MacOS/myEq --diagnose` prints read-only output-device information without enabling processing or saving settings. `--preview` opens Botaniq1 for interface development without capture or persistence.
 
-See [verification results and outstanding hardware checks](docs/VERIFICATION.md) and [architecture](docs/ARCHITECTURE.md). Twenty-one tests pass; the earlier 14-test baseline also passed AddressSanitizer. The user confirmed “Equalizing, and audio plays” on this Mac; device switching, Bluetooth call transitions, long playback, and full UI interaction coverage are not yet verified on hardware.
+See [verification results and outstanding hardware checks](docs/VERIFICATION.md) and [architecture](docs/ARCHITECTURE.md). Twenty-five tests pass normally and with AddressSanitizer. The user confirmed “Equalizing, and audio plays” on this Mac; window visibility transitions, device switching, Bluetooth call transitions, long playback, and full UI interaction coverage are not yet verified on hardware.
 
 ## Audio design
 

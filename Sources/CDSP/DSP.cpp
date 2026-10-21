@@ -94,6 +94,10 @@ struct MEQDSP {
     MEQChannel inL{},inR{},outL{},outR{};
     std::atomic<uint64_t> peaks{0};
     std::atomic<float> reduction{0};
+    // Odd epochs collect visual data. Each visibility transition starts a new
+    // interval, including a hide/show pair entirely between audio callbacks.
+    std::atomic<uint64_t> meterEpoch{0},publishedMeterEpoch{0};
+    uint64_t callbackMeterEpoch=0;
     std::atomic<uint64_t> callbacks{0},faults{0};
     void publishLevels(float left, float right, double minGain) {
         // One packed atomic gives both channels the same polling interval.
@@ -106,7 +110,50 @@ struct MEQDSP {
         const float attenuation = float(-20 * log10(std::max(minGain, 1e-20)));
         auto oldReduction = reduction.load(std::memory_order_relaxed);
         while (oldReduction < attenuation && !reduction.compare_exchange_weak(oldReduction, attenuation, std::memory_order_relaxed)) {}
-        callbacks.fetch_add(1, std::memory_order_relaxed);
+    }
+    template<bool Metering, typename Source, typename Destination>
+    void render(uint32_t n, Source source, Destination dest, uint64_t epoch) {
+        float peakLeft=0,peakRight=0;double minGain=1;
+        for(uint32_t i=0;i<n;++i) {
+            double l=source(0,i),r=source(1,i);
+            frame(l,r);dest(0,i,l);dest(1,i,r);
+            if constexpr(Metering) {
+                peakLeft=std::max(peakLeft,float(std::abs(l)));
+                peakRight=std::max(peakRight,float(std::abs(r)));
+                minGain=std::min(minGain,limiterGain);
+            }
+        }
+        if constexpr(Metering) {
+            if(meterEpoch.load(std::memory_order_acquire)==epoch) {
+                publishLevels(peakLeft,peakRight,minGain);
+                publishedMeterEpoch.store(epoch,std::memory_order_release);
+            }
+        }
+        callbacks.fetch_add(1,std::memory_order_relaxed);
+    }
+    template<typename Source, typename Destination>
+    void process(uint32_t n, Source source, Destination dest) {
+        begin();
+        const auto epoch=meterEpoch.load(std::memory_order_acquire);
+        if(epoch!=callbackMeterEpoch) {
+            // Only the audio thread resets these between render blocks, so an
+            // in-flight block can never leak an old peak into a new epoch.
+            peaks.store(0,std::memory_order_relaxed);
+            reduction.store(0,std::memory_order_relaxed);
+            callbackMeterEpoch=epoch;
+        }
+        if(epoch&1) render<true>(n,source,dest,epoch);
+        else render<false>(n,source,dest,epoch);
+    }
+    MEQMeter meter(bool consume) {
+        MEQMeter result{0,0,0,callbacks.load(std::memory_order_relaxed),faults.load(std::memory_order_relaxed)};
+        const auto epoch=meterEpoch.load(std::memory_order_acquire);
+        if((epoch&1) && publishedMeterEpoch.load(std::memory_order_acquire)==epoch) {
+            const auto p=unpackPeaks(consume ? peaks.exchange(0,std::memory_order_relaxed) : peaks.load(std::memory_order_relaxed));
+            result.peakLeft=p[0];result.peakRight=p[1];
+            result.reduction=consume ? reduction.exchange(0,std::memory_order_relaxed) : reduction.load(std::memory_order_relaxed);
+        }
+        return result;
     }
     void begin() {
         const unsigned r=read.load(std::memory_order_relaxed),w=write.load(std::memory_order_acquire);
@@ -149,7 +196,7 @@ bool meq_prepare(MEQDSP *d,double fs,const MEQBand *b,int n,double gain) {
     d->read=0;d->write=0;d->fadeRemaining=0;d->fadeLength=uint32_t(fs*.02);
     d->delay=uint32_t(ceil(fs*.001));d->release=exp(-1/(fs*.05));d->limiterGain=1;
     d->delayLine.assign(d->delay,{0,0});d->maxima.assign(d->delay+2,0);d->positions.assign(d->delay+2,0);
-    d->sequence=0;d->head=d->tail=0;d->peaks=0;d->reduction=0;d->callbacks=0;d->faults=0;return true;
+    d->sequence=0;d->head=d->tail=0;d->peaks=0;d->reduction=0;d->publishedMeterEpoch=0;d->callbackMeterEpoch=0;d->callbacks=0;d->faults=0;return true;
 }
 bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
     if(!d||!valid(b,n,gain))return false;
@@ -160,12 +207,14 @@ bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
 void meq_layout(MEQDSP*d,MEQChannel a,MEQChannel b,MEQChannel c,MEQChannel e){d->inL=a;d->inR=b;d->outL=c;d->outR=e;}
 void meq_process(MEQDSP*d,float*s,uint32_t n) {
     if(!d||d->delayLine.empty())return;
-    d->begin();float peakLeft=0,peakRight=0;double minGain=1;
-    for(uint32_t i=0;i<n;++i) {double l=s[i*2],r=s[i*2+1];d->frame(l,r);s[i*2]=float(l);s[i*2+1]=float(r);peakLeft=std::max(peakLeft,float(std::abs(l)));peakRight=std::max(peakRight,float(std::abs(r)));minGain=std::min(minGain,d->limiterGain);}
-    d->publishLevels(peakLeft,peakRight,minGain);
+    d->process(n,[s](int c,uint32_t i){return s[i*2+c];},[s](int c,uint32_t i,double v){s[i*2+c]=float(v);});
 }
-MEQMeter meq_meter(MEQDSP*d){const auto p=unpackPeaks(d->peaks.load(std::memory_order_relaxed));return {p[0],p[1],d->reduction.load(),d->callbacks.load(),d->faults.load()};}
-MEQMeter meq_take_meter(MEQDSP*d){const auto p=unpackPeaks(d->peaks.exchange(0,std::memory_order_relaxed));return {p[0],p[1],d->reduction.exchange(0),d->callbacks.load(),d->faults.load()};}
+void meq_set_metering_enabled(MEQDSP*d,bool enabled) {
+    const auto epoch=d->meterEpoch.load(std::memory_order_relaxed);
+    if(bool(epoch&1)!=enabled)d->meterEpoch.store(epoch+1,std::memory_order_release);
+}
+MEQMeter meq_meter(MEQDSP*d){return d->meter(false);}
+MEQMeter meq_take_meter(MEQDSP*d){return d->meter(true);}
 double meq_response(const MEQBand*b,int n,double f,double fs) {
     if(!valid(b,n,0)||!std::isfinite(f)||!std::isfinite(fs)||fs<32000)return 0;
     const auto z=std::polar(1.,-2*pi*f/fs);double db=0;
@@ -192,8 +241,8 @@ OSStatus meq_audio_callback(AudioObjectID,const AudioTimeStamp*,const AudioBuffe
     // physical output clock running; absence of signal is not a callback failure.
     auto source=[in](MEQChannel c,uint32_t i,uint32_t frames){return i<frames ? static_cast<const float*>(in->mBuffers[c.buffer].mData)[i*c.stride+c.channel] : 0.f;};
     auto dest=[out](MEQChannel c,uint32_t i,double v){static_cast<float*>(out->mBuffers[c.buffer].mData)[i*c.stride+c.channel]=float(v);};
-    d->begin();float peakLeft=0,peakRight=0;double minGain=1;
-    for(uint32_t i=0;i<n;++i){double l=source(d->inL,i,inputL),r=source(d->inR,i,inputR);d->frame(l,r);dest(d->outL,i,l);dest(d->outR,i,r);peakLeft=std::max(peakLeft,float(std::abs(l)));peakRight=std::max(peakRight,float(std::abs(r)));minGain=std::min(minGain,d->limiterGain);}
-    d->publishLevels(peakLeft,peakRight,minGain);return noErr;
+    d->process(n,[&](int c,uint32_t i){return c ? source(d->inR,i,inputR) : source(d->inL,i,inputL);},
+                 [&](int c,uint32_t i,double v){dest(c ? d->outR : d->outL,i,v);});
+    return noErr;
 }
 }

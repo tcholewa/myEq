@@ -6,6 +6,11 @@ final class OutputMeterModel: ObservableObject {
   @Published private(set) var envelope = OutputMeterEnvelope()
   private var lastUpdate = ProcessInfo.processInfo.systemUptime
 
+  func reset() {
+    lastUpdate = ProcessInfo.processInfo.systemUptime
+    if envelope != OutputMeterEnvelope() { envelope = OutputMeterEnvelope() }
+  }
+
   func update(_ levels: OutputLevels) {
     let now = ProcessInfo.processInfo.systemUptime
     var next = envelope

@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
   @Published var combined: [Double] = []
   @Published var effectivePreamp = 0.0
   @Published var launchAtLogin = false
+  @Published private(set) var isEditorVisible = false
   let engine = AudioEngine()
   let outputMeter = OutputMeterModel()
   private let store: PresetStore
@@ -53,7 +54,10 @@ final class AppModel: ObservableObject {
       self.engineStatus = status
       if changedRate { self.refreshGraph() }
     }
-    engine.onMeter = { [weak self] levels in self?.outputMeter.update(levels) }
+    engine.onMeter = { [weak self] levels in
+      guard let self, self.isEditorVisible else { return }
+      self.outputMeter.update(levels)
+    }
     let center = NSWorkspace.shared.notificationCenter
     notifications.append(
       center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) {
@@ -69,6 +73,15 @@ final class AppModel: ObservableObject {
   var allPresets: [EQPreset] { EQPreset.factory + saved.presets }
   var isModified: Bool { allPresets.first(where: { $0.id == saved.current.id }) != saved.current }
   var frequencyLimit: Double { min(20000, max(32000, engineStatus.sampleRate) * 0.45) }
+  func setEditorVisible(_ visible: Bool) {
+    guard isEditorVisible != visible else { return }
+    isEditorVisible = visible
+    engine.setEditorVisible(visible && !previewMode)
+    outputMeter.reset()
+    graphWork?.cancel()
+    graphWork = nil
+    if visible { refreshGraph() }
+  }
   func edit(_ operation: (inout EQPreset) -> Void) {
     operation(&saved.current)
     changed()
@@ -143,8 +156,10 @@ final class AppModel: ObservableObject {
   }
   func refreshGraph() {
     graphWork?.cancel()
+    graphWork = nil
+    guard isEditorVisible else { return }
     let work = DispatchWorkItem { [weak self] in
-      guard let self else { return }
+      guard let self, self.isEditorVisible else { return }
       let rate = max(32000, self.engineStatus.sampleRate)
       let preset = self.saved.current
       self.effectivePreamp =

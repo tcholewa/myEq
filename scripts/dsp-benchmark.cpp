@@ -9,10 +9,12 @@
 int main() {
     constexpr unsigned frames = 256, blocks = 12000;
     for (double rate : {44100., 48000., 96000., 192000.}) {
+      for (bool metering : {true, false}) {
         std::array<MEQBand, 8> bands;
         for (int i = 0; i < 8; ++i) bands[i] = {0, true, 60. * pow(2., i), i % 2 ? -6. : 6., .15};
         auto *dsp = meq_create();
         if (!meq_prepare(dsp, rate, bands.data(), 8, -12)) return 1;
+        meq_set_metering_enabled(dsp, metering);
         std::array<float, frames * 2> samples;
         std::vector<double> timings;
         timings.reserve(blocks);
@@ -33,9 +35,10 @@ int main() {
         }
         std::sort(timings.begin(), timings.end());
         const auto meter = meq_meter(dsp);
-        std::printf("{\"sample_rate\":%.0f,\"frames_per_block\":%u,\"blocks\":%u,\"median_us\":%.2f,\"p99_us\":%.2f,\"max_us\":%.2f,\"p99_budget_percent\":%.2f,\"faults\":%llu}\n",
-                    rate, frames, blocks, timings[blocks / 2], timings[blocks * 99 / 100], timings.back(), timings[blocks * 99 / 100] / (frames / rate * 1e6) * 100., (unsigned long long)meter.faults);
+        std::printf("{\"sample_rate\":%.0f,\"metering\":%s,\"frames_per_block\":%u,\"blocks\":%u,\"median_us\":%.2f,\"p99_us\":%.2f,\"max_us\":%.2f,\"p99_budget_percent\":%.2f,\"faults\":%llu}\n",
+                    rate, metering ? "true" : "false", frames, blocks, timings[blocks / 2], timings[blocks * 99 / 100], timings.back(), timings[blocks * 99 / 100] / (frames / rate * 1e6) * 100., (unsigned long long)meter.faults);
         meq_destroy(dsp);
         if (meter.faults) return 3;
+      }
     }
 }

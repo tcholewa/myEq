@@ -48,6 +48,7 @@ final class CallbackTests: XCTestCase {
     defer { meq_destroy(dsp) }
     let bands = EQPreset.flat.bands.map(\.native)
     XCTAssertTrue(meq_prepare(dsp, 48000, bands, 8, 0))
+    meq_set_metering_enabled(dsp, true)
     // First buffer is a microphone. Only the trailing stereo tap is audible.
     let input = Buffers(channels: [1, 2])
     let output = Buffers(channels: [2])
@@ -73,6 +74,7 @@ final class CallbackTests: XCTestCase {
     defer { meq_destroy(dsp) }
     let bands = EQPreset.flat.bands.map(\.native)
     XCTAssertTrue(meq_prepare(dsp, 48000, bands, 8, 0))
+    meq_set_metering_enabled(dsp, true)
     let input = Buffers(channels: [1, 1])
     let output = Buffers(channels: [1, 1])
     input.samples[0][0] = 0.1
@@ -87,6 +89,16 @@ final class CallbackTests: XCTestCase {
     let meter = meq_take_meter(dsp)
     XCTAssertEqual(meter.peakLeft, 0.1, accuracy: 1e-6)
     XCTAssertEqual(meter.peakRight, 0.2, accuracy: 1e-6)
+    meq_set_metering_enabled(dsp, false)
+    invoke(dsp, input, output)
+    XCTAssertEqual(output.samples[1][48], 0.1, accuracy: 1e-6)
+    XCTAssertEqual(output.samples[0][48], 0.2, accuracy: 1e-6)
+    XCTAssertEqual(meq_meter(dsp).peakLeft, 0)
+    XCTAssertEqual(meq_meter(dsp).callbacks, 2)
+    meq_set_metering_enabled(dsp, true)
+    input.samples[0][0] = 0.05
+    invoke(dsp, input, output)
+    XCTAssertEqual(meq_take_meter(dsp).peakLeft, 0.05, accuracy: 1e-6)
   }
   func testDormantTapIsSilenceNotFailure() {
     let dsp = meq_create()!

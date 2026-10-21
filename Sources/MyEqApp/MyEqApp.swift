@@ -9,6 +9,7 @@ struct MyEqApp: App {
   var body: some Scene {
     Window("myEq", id: "equalizer") {
       EqualizerView(model: model)
+        .background(EditorVisibilityObserver(onChange: model.setEditorVisible))
         .preferredColorScheme(.dark)
     }
     .defaultSize(width: 1120, height: 850)

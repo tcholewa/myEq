@@ -55,10 +55,28 @@ The Release app rebuilt and passed local signature verification; Swift formattin
 
 On 2026-10-21, the numeric L/R dBFS readouts and accessibility values were connected directly to the held-peak values used by the white markers. Both now follow the same one-second hold and 6 dB/second decay. The existing **21 tests** passed, the Release app rebuilt and passed local signature verification, and Swift formatting lint and whitespace checks passed. Live visual verification remains outstanding.
 
+## Visibility-based CPU optimization
+
+On 2026-10-21, **25 tests passed** normally and with AddressSanitizer. Added coverage verifies that hidden metering starts disabled, produces no UI deliveries, resumes on show, stops when audio detaches, and discards deliveries already queued on the main thread. DSP tests compare every output sample against an always-metered reference while repeatedly toggling visibility, changing EQ, exercising the limiter, and injecting non-finite input. Audio samples match exactly and health counters continue advancing. Tests also cover hidden peaks, rapid hide/show cycles between callbacks, and the planar hardware callback with metering disabled.
+
+The Release app built and passed local signature verification. Swift formatting lint and whitespace checks passed. The implementation parks the 60 Hz meter timer, skips visual calculations in the audio callback, defers graph work, and avoids unchanged 4 Hz status publications while retaining audio health monitoring. Live window-notification behavior and whole-app CPU/wakeup measurements remain unverified because Computer Use access to myEq was previously denied.
+
+The optimized offline benchmark now runs both metering modes, each with 12,000 blocks of 256 frames, eight filters, and repeated parameter changes. All samples remained finite and bounded with zero faults:
+
+| Sample rate | Metering on median / p99 | Metering off median / p99 |
+|---|---:|---:|
+| 44.1 kHz | 5.79 / 11.46 µs | 5.54 / 10.00 µs |
+| 48 kHz | 5.54 / 10.00 µs | 5.42 / 9.75 µs |
+| 96 kHz | 7.12 / 10.08 µs | 6.96 / 9.75 µs |
+| 192 kHz | 9.12 / 10.04 µs | 8.96 / 10.17 µs |
+
+This is a single-run DSP measurement, not an end-to-end CPU comparison. It excludes the eliminated timer wakeups, main-thread meter formatting/updates, and graph work, and tail timings include scheduling noise. Reproduce with the benchmark command above.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
 
+- Verify close/reopen, minimize/restore, Hide/Unhide, switching Spaces, and fully covering/uncovering the editor during playback. Confirm fresh meters and the latest preset graph on return, continued audio while hidden, and no meter work when opening only the menu bar. Compare whole-app CPU and wakeups in Activity Monitor or Instruments before/after hiding.
 - Compare Flat/bypass playback for doubled audio, volume/mute behavior, and stereo separation; then compare Botaniq1 and an audible narrow-band edit.
 - Verify built-in speakers, physical USB/HDMI stereo, and Bluetooth stereo individually. The inspected output included an eqMac route, so it is not proof of direct physical-device compatibility.
 - Switch outputs while playing; disconnect/reconnect the selected device; change between 44.1/48/96/192 kHz where hardware supports them.
