@@ -50,6 +50,16 @@ Version 0.4.4 separates console-session eligibility from system sleep and declar
 
 The user reported successful playback after manually locking the screen on installed 0.4.4. Automatic screensaver activation and sustained locked playback still require confirmation; automated fixtures do not reproduce macOS screensaver scheduling. When reporting a recurrence, include whether the Mac locked, slept or switched users, whether Retry restored EQ, and the approximate time. Transition diagnostics identify connection/lease failures without recording audio.
 
+### Drops during heavy CPU load
+
+Compilation or other heavy work can coincide with Core Audio overloads. Version 0.4.5 isolates heartbeat renewal from synchronous device discovery so a slow device query does not itself block the app's lease renewal. It retains the existing lease and render-progress checks; it cannot guarantee uninterrupted audio when the system misses real-time deadlines. This candidate still needs installed playback validation under the user's workload.
+
+For a recurrence, note the time, workload and whether EQ recovered or needed Retry. Engine and transport diagnostics are available without recording audio:
+
+```sh
+log show --last 5m --style compact --predicate 'subsystem == "com.tc.myEq" OR ((process == "myEqBridge" OR process == "myEqRecovery") AND eventMessage CONTAINS "myEq:")'
+```
+
 ### Driver installed but not loaded
 
 The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3 upgrade: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:

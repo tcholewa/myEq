@@ -3,6 +3,7 @@ import CDSP
 import CTransport
 import CoreAudio
 import Foundation
+import OSLog
 
 /// All lifecycle calls run on the engine's control queue. The IOProc is C++ only.
 final class VirtualOutputSession {
@@ -14,6 +15,8 @@ final class VirtualOutputSession {
   private var sourceDevice: AudioObjectID = 0
   private var started = false
   private var activity: NSObjectProtocol?
+  private var sessionHeartbeat: SessionHeartbeat?
+  private let logger = Logger(subsystem: "com.tc.myEq", category: "transport")
   private var diagnosticTime: TimeInterval = 0
   private var reportedUnderruns: UInt64 = 0
   private var reportedOverruns: UInt64 = 0
@@ -80,7 +83,7 @@ final class VirtualOutputSession {
       }
       sourceDevice = source
       let sourceFrames = try HAL.scalar(source, kAudioDevicePropertyBufferFrameSize, UInt32(0))
-      NSLog("myEq: audio buffers source=%u output=%u rate=%.0f", sourceFrames, frames, route.rate)
+      logger.notice("Audio buffers source=\(sourceFrames) output=\(frames) rate=\(route.rate)")
       try checked {
         renderer = meq_renderer_create(
           connection, dsp, route.rate, frames, sourceFrames,
@@ -101,6 +104,17 @@ final class VirtualOutputSession {
         Thread.sleep(forTimeInterval: 0.005)
       }
       try checkedStartup { meq_activate_route(connection, route.uid, $0, $1, $2) }
+      let heartbeatConnection = connection
+      sessionHeartbeat = SessionHeartbeat {
+        var error = [CChar](repeating: 0, count: 512)
+        var retryable = false
+        let health = meq_heartbeat(heartbeatConnection, &error, error.count, &retryable)
+        if health == 0 {
+          return .failure(
+            AudioFailure(message: String(cString: error), retryableConnection: retryable))
+        }
+        return .success(Int(health))
+      }
     } catch {
       stop()
       throw error
@@ -108,6 +122,11 @@ final class VirtualOutputSession {
   }
   /// 1 healthy, 2 manual output selection, 3 disconnected destination.
   func heartbeat() throws -> Int {
+    guard let sessionHeartbeat else {
+      throw AudioFailure(message: "Audio heartbeat is not running.")
+    }
+    let state = try sessionHeartbeat.read()
+    guard state == 1 else { return state }
     let sourceFrames = try HAL.scalar(sourceDevice, kAudioDevicePropertyBufferFrameSize, UInt32(0))
     guard meq_renderer_set_source_frames(renderer, sourceFrames) else {
       throw AudioFailure(message: "The virtual output buffer size is unsupported.")
@@ -120,10 +139,9 @@ final class VirtualOutputSession {
         || health.discontinuities != reportedDiscontinuities
     {
       // Control-queue diagnostics only, at most once per five seconds. No audio data.
-      NSLog(
-        "myEq: transport underruns=%llu overruns=%llu discontinuities=%llu buffered=%u ratio=%.6f",
-        health.underruns, health.overruns, health.discontinuities,
-        health.bufferedFrames, health.correction)
+      logger.notice(
+        "Transport underruns=\(health.underruns) overruns=\(health.overruns) discontinuities=\(health.discontinuities) buffered=\(health.bufferedFrames) ratio=\(health.correction)"
+      )
       diagnosticTime = time
       reportedUnderruns = health.underruns
       reportedOverruns = health.overruns
@@ -133,13 +151,7 @@ final class VirtualOutputSession {
       throw AudioFailure(
         message: "Invalid audio buffers. Ordinary playback has been restored; Retry to reconnect.")
     }
-    var error = [CChar](repeating: 0, count: 512)
-    var retryable = false
-    let state = meq_heartbeat(connection, &error, error.count, &retryable)
-    if state == 0 {
-      throw AudioFailure(message: String(cString: error), retryableConnection: retryable)
-    }
-    return Int(state)
+    return state
   }
   private func syncVolume() {
     guard let connection, let volume else { return }
@@ -172,6 +184,9 @@ final class VirtualOutputSession {
       "Disabling physical microphone inputs")
   }
   func stop() {
+    // Drain in-flight heartbeats before route restoration or releasing the XPC connection.
+    sessionHeartbeat?.stop()
+    sessionHeartbeat = nil
     // Restore defaults before stopping our physical renderer.
     if let connection { meq_close_transport(connection) }
     if let io {

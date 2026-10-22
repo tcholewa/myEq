@@ -2,6 +2,7 @@ import CDSP
 import CoreAudio
 import CoreGraphics
 import Foundation
+import OSLog
 
 public struct AudioOutput: Equatable, Identifiable {
   public let id: String
@@ -28,6 +29,7 @@ public final class AudioEngine {
   public var onBypass: (() -> Void)?
   public var onSelectedOutput: ((String) -> Void)?
   public var onMeter: ((OutputLevels) -> Void)?
+  private let logger = Logger(subsystem: "com.tc.myEq", category: "engine")
   private let queue = DispatchQueue(label: "com.tc.myEq.audio-control", qos: .userInitiated)
   private var timer: DispatchSourceTimer?
   private var meterMonitor: OutputMeterMonitor?
@@ -109,7 +111,7 @@ public final class AudioEngine {
   }
   public func setSleeping(_ sleeping: Bool) {
     queue.async { [weak self] in
-      NSLog("myEq: system sleep=%d", sleeping)
+      self?.logger.notice("System sleep=\(sleeping)")
       self?.sleeping = sleeping
       self?.blocked = false
       self?.startupRetry.reset()
@@ -134,6 +136,11 @@ public final class AudioEngine {
   }
   private func publish() {
     guard snapshot != lastPublished else { return }
+    if snapshot.state != lastPublished?.state {
+      logger.notice(
+        "Engine state=\(self.snapshot.state.title, privacy: .public) detail=\(self.snapshot.state.detail ?? "", privacy: .public)"
+      )
+    }
     lastPublished = snapshot
     let value = snapshot
     DispatchQueue.main.async { [weak self] in self?.onUpdate?(value) }
@@ -168,7 +175,7 @@ public final class AudioEngine {
         ownUID: getuid())
       if loginEligible != eligible {
         loginEligible = eligible
-        NSLog("myEq: login session eligible=%d", eligible)
+        logger.notice("Login session eligible=\(eligible)")
         blocked = false
         startupRetry.reset()
         reconnecting = false
@@ -220,6 +227,13 @@ public final class AudioEngine {
       if manuallyBypassed { DispatchQueue.main.async { [weak self] in self?.onBypass?() } }
       snapshot.selectedOutputUID = current?.uid
       if route != current {
+        if let previous = route, let current {
+          logger.notice(
+            "Rebuilding route id=\(previous.id)->\(current.id) rate=\(previous.rate)->\(current.rate) buffer=\(previous.bufferFrames)->\(current.bufferFrames) channels=\(previous.channels.reduce(0,+))->\(current.channels.reduce(0,+)) format=\(previous.supportedFormat)->\(current.supportedFormat)"
+          )
+        } else {
+          logger.notice("Route availability changed present=\(current != nil)")
+        }
         stop()
         route = current
         blocked = false
@@ -287,11 +301,12 @@ public final class AudioEngine {
         // Use the existing timer while authenticated helpers and routing settle.
         reconnecting = wasRunning
         snapshot.state = reconnecting ? .reconnecting : .starting
-        NSLog("myEq: retrying audio connection: %@", error.localizedDescription)
+        logger.notice("Retrying connection: \(error.localizedDescription, privacy: .public)")
       } else {
         blocked = true
         snapshot.state = .error(error.localizedDescription)
-        NSLog("myEq: audio startup/session failed: %@", error.localizedDescription)
+        logger.error(
+          "Audio startup/session failed: \(error.localizedDescription, privacy: .public)")
       }
     }
   }
