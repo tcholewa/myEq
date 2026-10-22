@@ -6,5 +6,5 @@
 <key>MachServices</key><dict><key>com.tc.myEq.recovery</key><true/></dict>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
-<key>ProcessType</key><string>Background</string>
+<key>ProcessType</key><string>Interactive</string>
 </dict></plist>

@@ -63,11 +63,17 @@ inline xpc_object_t sessionMessage(const char *op,uint64_t generation){
   auto m=message(op);xpc_dictionary_set_uint64(m,"generation",generation);return m;
 }
 inline bool sessionSchema(xpc_object_t m,const char *op){return schema(m,op,{{"generation",XPC_TYPE_UINT64}})&&xpc_dictionary_get_uint64(m,"generation");}
+// Accepted peers do not inherit their listener's queue. An explicit queue handoff also
+// makes serialization visible to race detectors and keeps XPC event barriers short.
+inline void serialEvents(xpc_connection_t c,dispatch_queue_t q,void (^handler)(xpc_object_t)){
+  xpc_connection_set_target_queue(c,q);
+  xpc_connection_set_event_handler(c,^(xpc_object_t m){dispatch_async(q,^{handler(m);});});
+}
 // All completions and deadlines execute on the supplied serial control queue.
 inline void requestAsync(xpc_connection_t c,xpc_object_t m,dispatch_queue_t q,double seconds,void (^completion)(xpc_object_t)) {
   if(!c){dispatch_async(q,^{completion(nil);});return;}
   auto done=std::make_shared<bool>(false);
-  xpc_connection_send_message_with_reply(c,m,q,^(xpc_object_t r){if(!*done){*done=true;completion(r);}});
+  xpc_connection_send_message_with_reply(c,m,q,^(xpc_object_t r){dispatch_async(q,^{if(!*done){*done=true;completion(r);}});});
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,int64_t(seconds*1e9)),q,^{if(!*done){*done=true;completion(nil);}});
 }
 // Block captures own this storage even if the caller times out before XPC completes.

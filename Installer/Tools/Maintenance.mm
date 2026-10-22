@@ -125,8 +125,10 @@ NSMutableDictionary *validate(const std::string &backup="",bool legacy=false){
   auto driverTrust=readPlist((location(items[1],backup)+"/Contents/Resources/BridgeTrust.plist").c_str(),64*1024,expectedOwner());
   require([driverTrust[@"bridge"] isEqual:result[@"bridge"]],"Driver and bridge trust do not match.");
   auto daemon=readPlist(location(items[4],backup).c_str(),16*1024,expectedOwner());
-  NSDictionary *expected=@{@"Label":@"com.tc.myEq.bridge",@"ProgramArguments":@[@"/Library/Application Support/myEq/myEqBridge"],@"UserName":@"nobody",@"MachServices":@{@"com.tc.myEq.bridge":@YES},@"ProcessType":@"Background"};
-  require([daemon isEqualToDictionary:expected],"Unexpected bridge launch configuration.");
+  NSDictionary *expected=@{@"Label":@"com.tc.myEq.bridge",@"ProgramArguments":@[@"/Library/Application Support/myEq/myEqBridge"],@"UserName":@"nobody",@"MachServices":@{@"com.tc.myEq.bridge":@YES},@"ProcessType":@"Interactive"};
+  // Permit exactly the previous and current complete schemas for upgrade/rollback.
+  NSMutableDictionary *legacyExpected=[expected mutableCopy];legacyExpected[@"ProcessType"]=@"Background";
+  require([daemon isEqualToDictionary:expected]||[daemon isEqualToDictionary:legacyExpected],"Unexpected bridge launch configuration.");
   return result;
 }
 void writeManifest(int dir,NSDictionary *value){

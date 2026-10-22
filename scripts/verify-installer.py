@@ -75,7 +75,11 @@ with tempfile.TemporaryDirectory(
 
     assert plistlib.loads((driver / "Contents/Resources/BridgeTrust.plist").read_bytes())["bridge"] == trust["bridge"]
 
+    daemon = plistlib.loads((root / "Library/LaunchDaemons/com.tc.myEq.bridge.plist").read_bytes())
+    assert daemon == plistlib.loads((repo / "Installer/com.tc.myEq.bridge.plist").read_bytes())
+    assert daemon["ProcessType"] == "Interactive", "audio lease service must not be background throttled"
     agent = plistlib.loads((app / "Contents/Library/LaunchAgents/com.tc.myEq.recovery.plist").read_bytes())
+    assert agent["ProcessType"] == "Interactive"
     constraint = agent.pop("SpawnConstraint")
     assert constraint == {
         "signing-identifier": "com.tc.myEq.recovery",

@@ -282,7 +282,8 @@ public final class AudioEngine {
         defer {
           if newSession.bufferPolicyAttempted { bufferPolicyUIDs.insert(current.uid) }
         }
-        try newSession.start(route: current, preset: preset, preamp: snapshot.preamp, applyBufferPolicy: applyBuffers)
+        try newSession.start(
+          route: current, preset: preset, preamp: snapshot.preamp, applyBufferPolicy: applyBuffers)
         // Absorb our own HAL change so the next topology poll does not rebuild the session.
         route = try OutputRoute.read(current.id)
         session = newSession

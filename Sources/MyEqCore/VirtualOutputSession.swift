@@ -44,7 +44,9 @@ final class VirtualOutputSession {
       throw AudioFailure(message: String(cString: error), retryableConnection: retryable)
     }
   }
-  func start(route: OutputRoute, preset: EQPreset, preamp: Double, applyBufferPolicy: Bool = true) throws {
+  func start(route: OutputRoute, preset: EQPreset, preamp: Double, applyBufferPolicy: Bool = true)
+    throws
+  {
     do {
       activity = ProcessInfo.processInfo.beginActivity(
         options: .userInitiatedAllowingIdleSystemSleep, reason: "System audio equalization")
@@ -58,7 +60,9 @@ final class VirtualOutputSession {
       }
       try checkedStartup { meq_open_transport(connection, route.rate, route.name, $0, $1, $2) }
       bufferPolicyAttempted = applyBufferPolicy
-      try checkedStartup { meq_prepare_buffers(connection, route.uid, applyBufferPolicy, $0, $1, $2) }
+      try checkedStartup {
+        meq_prepare_buffers(connection, route.uid, applyBufferPolicy, $0, $1, $2)
+      }
       device = route.id
       let preferred =
         (try? HAL.ids(
@@ -87,7 +91,9 @@ final class VirtualOutputSession {
       }
       sourceDevice = source
       let sourceFrames = try HAL.scalar(source, kAudioDevicePropertyBufferFrameSize, UInt32(0))
-      logger.notice("Audio buffers source=\(sourceFrames) output=\(frames) rate=\(route.rate) sourceMs=\(Double(sourceFrames) * 1000 / route.rate) outputMs=\(Double(frames) * 1000 / route.rate) target=\(max(256, 2 * max(frames, sourceFrames)))")
+      logger.notice(
+        "Audio buffers source=\(sourceFrames) output=\(frames) rate=\(route.rate) sourceMs=\(Double(sourceFrames) * 1000 / route.rate) outputMs=\(Double(frames) * 1000 / route.rate) target=\(max(256, 2 * max(frames, sourceFrames)))"
+      )
       try checked {
         renderer = meq_renderer_create(
           connection, dsp, route.rate, frames, sourceFrames,
@@ -142,7 +148,9 @@ final class VirtualOutputSession {
       timingDiagnosticTime = time
       let timing = meq_render_timing(renderer)
       if timing.callbacks > 0 {
-        logger.notice("Render timing callbacks=\(timing.callbacks) maxNS=\(timing.maximumNS) overHalfPeriod=\(timing.overHalfPeriod) overPeriod=\(timing.overPeriod)")
+        logger.notice(
+          "Render timing callbacks=\(timing.callbacks) maxNS=\(timing.maximumNS) overHalfPeriod=\(timing.overHalfPeriod) overPeriod=\(timing.overPeriod)"
+        )
       }
     }
     if time - diagnosticTime >= 5,

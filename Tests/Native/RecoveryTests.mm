@@ -52,6 +52,7 @@ static void completeRPC(const char *operation,xpc_object_t result){
   assert(meq::string(pending.message,"op")==operation);pending.completion(result);
 }
 int main(){@autoreleasepool{
+  consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);
   journal=[[NSTemporaryDirectory() stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]] stringByAppendingPathComponent:@"journal.plist"];
   mockDevices={{2,{deviceUID,true,kAudioDeviceTransportTypeVirtual}},{3,{"usb",true,kAudioDeviceTransportTypeUSB}},
     {4,{"built-in",true,kAudioDeviceTransportTypeBuiltIn}},{5,{"alerts",true,kAudioDeviceTransportTypeHDMI}}};
@@ -108,10 +109,10 @@ int main(){@autoreleasepool{
   completeRPC("status",response());completeRPC("settled",response());assert(settled);
   generation=18;handleRetired(17);assert(pendingRPCs.empty()&&generation==18);generation=0;
   // A different console user cannot restore this user's routes.
-  consoleUID=getuid()+1;media=2;alerts=2;
+  consoleUID=getuid()+1;consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);media=2;alerts=2;
   assert(!foregroundSelf()&&!restoreDefaults()&&media==2&&alerts==2);
   beginActivity();active=true;generation=19;tick();assert(!active&&!activity);
-  pendingRPCs.clear();consoleUID=getuid();
+  pendingRPCs.clear();consoleUID=getuid();consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);
   // Losing ownership during activation releases the activity and invalidates late completion.
   beginActivity();activating=true;generation=20;auto oldEpoch=epoch;
   finishActivation(nullptr,nil,oldEpoch,now());

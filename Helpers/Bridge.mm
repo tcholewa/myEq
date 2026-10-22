@@ -1,22 +1,24 @@
 #include "IPC.hpp"
 #include "Health.hpp"
+#include "ConsoleUser.hpp"
 #import <SystemConfiguration/SystemConfiguration.h>
 
 using namespace meq;
 namespace {
 dispatch_queue_t queue;
+ConsoleUserMonitor consoleUser;
 xpc_connection_t driverPeer,appPeer,recoveryPeer;
 std::shared_ptr<Mapping> memory;
 uint64_t generation=0,appBeat=0,recoveryBeat=0,lastRender=0,renderChanged=0;
 bool sessionActive=false,recoveryAvailable=false;
 uint64_t retiredGeneration=0;
 size_t pendingPeers=0;
-struct Peer { std::string role;bool ready=false,pending=true; };
+struct Peer { std::string role;bool ready=false,pending=true;uint64_t deadline=now()+2*NSEC_PER_SEC; };
 void finishPending(const std::shared_ptr<Peer>& p){if(p->pending){p->pending=false;--pendingPeers;}}
 bool foreground(xpc_connection_t c){
   if(!c)return false;
-  uid_t uid=0;auto user=SCDynamicStoreCopyConsoleUser(nullptr,&uid,nullptr);if(user)CFRelease(user);
-  return uid>=500&&xpc_connection_get_euid(c)==uid;
+  auto uid=consoleUser.current();
+  return uid!=ConsoleUserState::unknown&&uid>=500&&xpc_connection_get_euid(c)==uid;
 }
 bool owner(xpc_connection_t c,const std::string &role){
   return c&&c==(role=="app"?appPeer:role=="recovery"?recoveryPeer:nullptr)&&foreground(c);
@@ -102,16 +104,19 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
   sendReply(c,r,"Unknown bridge operation.");
 }
 void acceptPeer(xpc_connection_t c,std::string appRequirement=requirement(@"app"),std::string recoveryRequirement=requirement(@"recovery")){
+  // Accepted peers start on the default queue, independently of their listener.
+  xpc_connection_set_target_queue(c,queue);
   if(pendingPeers>=32){xpc_connection_cancel(c);return;}
   ++pendingPeers;auto p=std::make_shared<Peer>();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),queue,^{if(!p->ready){finishPending(p);xpc_connection_cancel(c);}});
-  xpc_connection_set_event_handler(c,^(xpc_object_t m){
+  serialEvents(c,queue,^(xpc_object_t m){
     if(xpc_get_type(m)==XPC_TYPE_ERROR){
       finishPending(p);
       if(c==driverPeer){driverPeer=nil;revoke();}
       if(c==appPeer){appPeer=nil;revoke();}
       if(c==recoveryPeer){recoveryPeer=nil;recoveryAvailable=false;revoke();}return;
     }
+    if(!p->ready&&now()>=p->deadline){finishPending(p);xpc_connection_cancel(c);return;}
     if(!p->pending&&!p->ready){xpc_connection_cancel(c);return;}
     auto r=replyMessage(m);if(!r){finishPending(p);xpc_connection_cancel(c);return;}
     if(!isMessage(m)){sendReply(c,r,"Protocol mismatch.");finishPending(p);xpc_connection_cancel(c);return;}
@@ -139,9 +144,10 @@ void acceptPeer(xpc_connection_t c,std::string appRequirement=requirement(@"app"
 }
 }
 int main(){@autoreleasepool{
-  queue=dispatch_queue_create("com.tc.myEq.bridge",DISPATCH_QUEUE_SERIAL);
+  if(!consoleUser.start())return 78;
+  queue=dispatch_queue_create("com.tc.myEq.bridge",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_USER_INITIATED,0));
   auto listener=xpc_connection_create_mach_service(bridgeService,queue,XPC_CONNECTION_MACH_SERVICE_LISTENER);
-  xpc_connection_set_event_handler(listener,^(xpc_object_t o){if(xpc_get_type(o)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)o);});
+  serialEvents(listener,queue,^(xpc_object_t o){if(xpc_get_type(o)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)o);});
   xpc_connection_resume(listener);
   auto timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
   dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,NSEC_PER_SEC/4,NSEC_PER_MSEC*25);

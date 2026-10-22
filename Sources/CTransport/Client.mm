@@ -120,6 +120,11 @@ extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,si
   auto m=sessionMessage("activate",c->generation);xpc_dictionary_set_string(m,"uid",uid);
   auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
+static bool leaseStillLive(MEQConnection *c){
+  if(!c||c->state->failure.load()||!c->memory||c->memory->acceptedGeneration!=c->generation)return false;
+  auto s=c->memory->s;
+  return s->active.load(std::memory_order_acquire)&&now()<s->deadline.load(std::memory_order_acquire);
+}
 extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRetry){
   *canRetry=false;
   if(!c||c->state->failure.load()){
@@ -128,10 +133,13 @@ extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRet
   }
   // Renew first: a slow recovery status RPC must not starve the app's own lease.
   auto r=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
+  // Reply delivery may be late while the bridge has already renewed the authoritative lease.
+  // Never extend that deadline here; confirmed connection/authentication failures still stop.
+  if(!r&&leaseStillLive(c))return 1;
   if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return 0;}
   auto status=request(c->state->recovery,sessionMessage("status",c->generation),0.5);
   // Only absence of a reply is tolerated; the bridge independently enforces recovery freshness.
-  if(!status&&!c->state->failure.load())return 1;
+  if(!status&&leaseStillLive(c))return 1;
   if(!succeeded(status)){*canRetry=retryable(status);copyError(out,size,error(status));return 0;}
   if(!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,"The recovery helper returned an invalid status.");return 0;}
   auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);

@@ -1,6 +1,7 @@
 #include "IPC.hpp"
 #include "Health.hpp"
 #include "BufferPolicy.hpp"
+#include "ConsoleUser.hpp"
 #import <CoreAudio/CoreAudio.h>
 #import <AppKit/AppKit.h>
 #import <SystemConfiguration/SystemConfiguration.h>
@@ -8,6 +9,7 @@
 using namespace meq;
 namespace {
 dispatch_queue_t queue,halQueue;
+ConsoleUserMonitor consoleUser;
 bool routePollPending=false;
 uint64_t bridgeLastReply=0,preparedAt=0;
 xpc_connection_t bridge,app;
@@ -27,7 +29,7 @@ std::vector<BufferChange> bufferChanges;
 bool saveJournal();
 
 size_t pendingPeers=0;
-bool foregroundSelf(){uid_t uid=0;auto user=SCDynamicStoreCopyConsoleUser(nullptr,&uid,nullptr);if(user)CFRelease(user);return uid==getuid()&&uid>=500;}
+bool foregroundSelf(){auto uid=consoleUser.current();return uid!=ConsoleUserState::unknown&&uid==getuid()&&uid>=500;}
 bool owner(xpc_connection_t c){return c&&c==app&&foregroundSelf()&&xpc_connection_get_euid(c)==getuid()&&xpc_connection_get_asid(c)==auditSession();}
 AudioObjectPropertyAddress address(AudioObjectPropertySelector s,AudioObjectPropertyScope scope=kAudioObjectPropertyScopeGlobal){return {s,scope,0};}
 template<class T>T scalar(AudioObjectID id,AudioObjectPropertySelector s,T initial,AudioObjectPropertyScope scope=kAudioObjectPropertyScopeGlobal){auto a=address(s,scope);UInt32 n=sizeof(T);AudioObjectGetPropertyData(id,&a,0,nullptr,&n,&initial);return initial;}
@@ -158,7 +160,7 @@ void connectBridge(){
   auto c=xpc_connection_create_mach_service(bridgeService,queue,XPC_CONNECTION_MACH_SERVICE_PRIVILEGED);
   if(!constrain(c,requirement(@"bridge"))){xpc_connection_cancel(c);connecting=false;return;}
   bridge=c;
-  xpc_connection_set_event_handler(c,^(xpc_object_t m){
+  serialEvents(c,queue,^(xpc_object_t m){
     if(c!=bridge)return;
     if(sessionSchema(m,"retired")){
       // Also settle opens that failed before buffer preparation or activation.
@@ -265,13 +267,16 @@ void tick(){
   }else if(generation&&!activating&&now()-preparedAt>=4*NSEC_PER_SEC){reason=1;recoveryRetryable=true;restore();}
   else reconcile();
 }
-struct Peer{bool challenged=false,ready=false,pending=true;};
+struct Peer{bool challenged=false,ready=false,pending=true;uint64_t deadline=now()+2*NSEC_PER_SEC;};
 void finishPending(const std::shared_ptr<Peer>& p){if(p->pending){p->pending=false;--pendingPeers;}}
 void acceptPeer(xpc_connection_t c){
+  // Serialize peer events with lifecycle state, heartbeat replies and deadlines.
+  xpc_connection_set_target_queue(c,queue);
   if(pendingPeers>=32){xpc_connection_cancel(c);return;}++pendingPeers;auto p=std::make_shared<Peer>();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),queue,^{if(!p->ready){finishPending(p);xpc_connection_cancel(c);}});
-  xpc_connection_set_event_handler(c,^(xpc_object_t m){
+  serialEvents(c,queue,^(xpc_object_t m){
     if(xpc_get_type(m)==XPC_TYPE_ERROR){finishPending(p);if(app==c){app=nil;reason=1;recoveryRetryable=retryable(m);restore();}return;}
+    if(!p->ready&&now()>=p->deadline){finishPending(p);xpc_connection_cancel(c);return;}
     if(!p->pending&&!p->ready){xpc_connection_cancel(c);return;}
     auto r=replyMessage(m);if(!r){finishPending(p);xpc_connection_cancel(c);return;}
     if(!isMessage(m)){sendReply(c,r,"Protocol mismatch.");finishPending(p);xpc_connection_cancel(c);return;}
@@ -300,6 +305,7 @@ void acceptPeer(xpc_connection_t c){
 }
 }
 int main(int argc,const char **argv){@autoreleasepool{
+  if(!consoleUser.start())return 78;
   journal=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/myEq/route-recovery.plist"];
   NSDictionary *prior=readPlist(journal.fileSystemRepresentation,16*1024,getuid());
   // Legacy journals contain routing data only; they never authorize an active session.
@@ -325,7 +331,7 @@ int main(int argc,const char **argv){@autoreleasepool{
   queue=dispatch_queue_create("com.tc.myEq.recovery",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_USER_INITIATED,0));
   halQueue=dispatch_queue_create("com.tc.myEq.recovery.hal",DISPATCH_QUEUE_SERIAL);
   auto listener=xpc_connection_create_mach_service(recoveryService,queue,XPC_CONNECTION_MACH_SERVICE_LISTENER);
-  xpc_connection_set_event_handler(listener,^(xpc_object_t o){if(xpc_get_type(o)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)o);});xpc_connection_resume(listener);
+  serialEvents(listener,queue,^(xpc_object_t o){if(xpc_get_type(o)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)o);});xpc_connection_resume(listener);
   auto timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
   dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,NSEC_PER_SEC/4,NSEC_PER_MSEC*25);
   dispatch_source_set_event_handler(timer,^{tick();});dispatch_resume(timer);

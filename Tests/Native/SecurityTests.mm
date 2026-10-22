@@ -20,10 +20,11 @@ static std::string selfRequirement(){
   CFRelease(info);CFRelease(code);return result+"\"";
 }
 static void runIPC(){
+  consoleUser.state->publish(consoleUser.state->invalidate(),getuid());
   queue=dispatch_queue_create("myEq.security.fixture",DISPATCH_QUEUE_SERIAL);
   auto good=selfRequirement();
   auto listener=xpc_connection_create(nullptr,queue);
-  xpc_connection_set_event_handler(listener,^(xpc_object_t c){if(xpc_get_type(c)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)c,good,good);});xpc_connection_resume(listener);
+  serialEvents(listener,queue,^(xpc_object_t c){if(xpc_get_type(c)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)c,good,good);});xpc_connection_resume(listener);
   auto endpoint=xpc_endpoint_create(listener);
   auto connect=[&]{auto c=xpc_connection_create_from_endpoint(endpoint);xpc_connection_set_event_handler(c,^(xpc_object_t){});xpc_connection_resume(c);return c;};
   auto appClient=connect();auto helloResult=handshakeResult(appClient,"app");if(!succeeded(helloResult))std::cerr<<"Fixture handshake: "<<error(helloResult)<<"\n";assert(succeeded(helloResult));
@@ -41,7 +42,7 @@ static void runIPC(){
   xpc_connection_cancel(appClient);xpc_connection_cancel(recoveryClient);xpc_connection_cancel(listener);
   auto denied=xpc_connection_create(nullptr,queue);
   std::string impossible="cdhash H\"0000000000000000000000000000000000000000\"";
-  xpc_connection_set_event_handler(denied,^(xpc_object_t c){if(xpc_get_type(c)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)c,impossible,impossible);});xpc_connection_resume(denied);
+  serialEvents(denied,queue,^(xpc_object_t c){if(xpc_get_type(c)==XPC_TYPE_CONNECTION)acceptPeer((xpc_connection_t)c,impossible,impossible);});xpc_connection_resume(denied);
   auto remote=xpc_connection_create_from_endpoint(xpc_endpoint_create(denied));
   xpc_connection_set_event_handler(remote,^(xpc_object_t){});xpc_connection_resume(remote);
   assert(!handshake(remote,"app"));xpc_connection_cancel(remote);xpc_connection_cancel(denied);

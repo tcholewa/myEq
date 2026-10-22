@@ -28,6 +28,7 @@ static void mockReply(xpc_connection_t c,xpc_object_t r,const char *error="",boo
 #undef main
 #undef xpc_connection_send_message
 int main(){@autoreleasepool{
+  consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);
   // An anonymous, unexported listener supplies a valid object; sends are intercepted above.
   driverPeer=xpc_connection_create(nullptr,nullptr);
   xpc_connection_set_event_handler(driverPeer,^(xpc_object_t){});
@@ -59,9 +60,9 @@ int main(){@autoreleasepool{
   assert(!retryable(lastReply));
   foreignSession=recoveryPeer;assert(!paired());
   handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
-  foreignSession=nullptr;consoleUID=502;assert(!paired());
+  foreignSession=nullptr;consoleUID=502;consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);assert(!paired());
   handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
-  consoleUID=501;assert(paired());
+  consoleUID=501;consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);assert(paired());
   generation=43;
   handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
   for(auto c:{appPeer,recoveryPeer})xpc_connection_cancel(c);appPeer=nil;recoveryPeer=nil;generation=0;

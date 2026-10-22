@@ -1,5 +1,6 @@
 #include "../../Sources/CTransport/IPC.hpp"
 #include <deque>
+#include "../../Sources/CTransport/Health.hpp"
 #include <cassert>
 #include <iostream>
 static std::deque<xpc_object_t> responses;
@@ -19,7 +20,16 @@ int main(){@autoreleasepool{
   auto check=[&](int expected,bool retry){assert(meq_heartbeat(&c,error,sizeof(error),&canRetry)==expected);assert(canRetry==retry);assert(responses.empty());};
   responses={status(),status()};check(1,false);
   responses={nil};check(0,true);
+  c.memory=std::make_shared<Mapping>();assert(c.memory->create(48000,47));c.generation=47;
+  auto shared=c.memory->s;shared->active=1;shared->deadline=now()+peerHealthNS;
   responses={status(),nil};check(1,false);
+  responses={nil};check(1,false); // delayed bridge reply, valid existing lease
+  shared->deadline=now()-1;responses={nil};check(0,true);
+  responses={status(),nil};check(0,true);
+  shared->deadline=now()+peerHealthNS;
+  shared->active=0;responses={nil};check(0,true);
+  shared->active=1;c.generation=48;responses={nil};check(0,true);c.generation=47;
+  // Explicit error replies and signature/peer events cannot use a live lease as grace.
   responses={XPC_ERROR_CONNECTION_INTERRUPTED};check(0,true);
   responses={XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT};check(0,false);
   responses={meq::message("reply")};check(0,false);

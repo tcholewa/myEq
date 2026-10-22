@@ -40,6 +40,8 @@ jobs:
         run: bash scripts/test-native.sh
       - name: Native tests with AddressSanitizer and UndefinedBehaviorSanitizer
         run: bash scripts/test-native.sh asan
+      - name: Native control concurrency with ThreadSanitizer
+        run: bash scripts/test-native.sh tsan
       - name: Swift formatting
         run: xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
       - name: Build installer

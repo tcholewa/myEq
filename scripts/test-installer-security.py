@@ -52,14 +52,19 @@ def resign_and_update(bundle, manifest, role):
 
 with tempfile.TemporaryDirectory(prefix='myeq-installer-test-', dir='/private/tmp') as tmp:
     base = Path(tmp)
-    for case in ['valid', 'symlink', 'maintenance_symlink', 'hardlink', 'writable', 'acl', 'forged_helper', 'bad_manifest', 'bad_daemon', 'truncated', 'missing']:
+    for case in ['valid', 'legacy_background', 'bad_process_type', 'symlink', 'maintenance_symlink', 'hardlink', 'writable', 'acl', 'forged_helper', 'bad_manifest', 'bad_daemon', 'truncated', 'missing']:
         root = base / case
         root.mkdir()
         support = populate(root)
         victim = base / (case + '-unrelated')
         victim.write_bytes(b'unrelated fixture data')
         bridge = support / 'myEqBridge'
-        if case == 'symlink':
+        if case in ('legacy_background', 'bad_process_type'):
+            p = root / 'Library/LaunchDaemons/com.tc.myEq.bridge.plist'
+            job = plistlib.loads(p.read_bytes())
+            job['ProcessType'] = 'Background' if case == 'legacy_background' else 'Standard'
+            p.write_bytes(plistlib.dumps(job))
+        elif case == 'symlink':
             bridge.unlink(); bridge.symlink_to(victim)
         elif case == 'maintenance_symlink':
             (support / 'myEqMaintenance').unlink(); (support / 'myEqMaintenance').symlink_to(victim)
@@ -79,8 +84,8 @@ with tempfile.TemporaryDirectory(prefix='myeq-installer-test-', dir='/private/tm
             (support / 'trust.plist').write_bytes(b'broken plist')
         elif case == 'missing':
             bridge.unlink()
-        run(root, 'verify', case == 'valid')
-        if case != 'valid':
+        run(root, 'verify', case in ('valid', 'legacy_background'))
+        if case not in ('valid', 'legacy_background'):
             run(root, 'prepare', False)
             run(root, 'audio-reload-policy', False)
         assert victim.read_bytes() == b'unrelated fixture data'

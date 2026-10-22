@@ -5,5 +5,5 @@
 <key>ProgramArguments</key><array><string>/Library/Application Support/myEq/myEqBridge</string></array>
 <key>UserName</key><string>nobody</string>
 <key>MachServices</key><dict><key>com.tc.myEq.bridge</key><true/></dict>
-<key>ProcessType</key><string>Background</string>
+<key>ProcessType</key><string>Interactive</string>
 </dict></plist>
