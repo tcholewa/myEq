@@ -81,3 +81,9 @@ With EQ already enabled, `bash scripts/test-native.sh installed-playback` starts
 Open `myEq.xcodeproj` for editor development. `--preview` uses Botaniq1 without enabling audio or saving settings. `--diagnose` prints output-device information. See [architecture](docs/ARCHITECTURE.md) and [verification results and outstanding hardware checks](docs/VERIFICATION.md).
 
 The C++ DSP retains eight double-precision biquads, 20 ms parameter transitions, and a 1 ms lookahead limiter at −0.5 dBFS. This is a sample-peak limiter, not oversampled true-peak limiting. Hardware buffering, the shared ring, and clock conversion add latency beyond that 1 ms; the under-20-ms wired target must be measured end to end.
+
+## License and acknowledgments
+
+myEq's original code and documentation are licensed under the [MIT License](LICENSE). Copyright © 2026 Tomasz Cholewa.
+
+The DSP's biquad coefficient equations are based on Robert Bristow-Johnson's **Audio EQ Cookbook**, as published by W3C and edited by Raymond Toy. See [third-party acknowledgments and notices](THIRD_PARTY_NOTICES.md) for the source, adaptation details, and W3C license. The build includes both notice files in `myEq.app/Contents/Resources`; in Finder, choose **Show Package Contents** to read them.

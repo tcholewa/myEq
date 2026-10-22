@@ -197,6 +197,12 @@ The 0.3.3 package was installed successfully on 2026-10-22 after myEq closed. Th
 
 After being asked to open the installed app and close/reopen its main window, the user replied **“confirmed”** on 2026-10-22. The live check that the editor opens without a highlighted band or numeric field is therefore passed. This was user verified; Computer Use access to myEq remains denied.
 
+## MIT license and DSP acknowledgment
+
+On 2026-10-22, the project adopted the MIT License with copyright attributed to Tomasz Cholewa. `THIRD_PARTY_NOTICES.md` credits Robert Bristow-Johnson and the W3C Audio EQ Cookbook edited by Raymond Toy, identifies the C++ coefficient adaptations, and preserves the original document notice and full W3C Software and Document License (2015). The README, architecture, and DSP source link to these notices.
+
+The Release installer rebuild passes. Expanded-package verification confirms that `LICENSE` and `THIRD_PARTY_NOTICES.md` in the app's resources match the repository files byte for byte, alongside the existing signature, XPC identity, recovery constraint, version, icon, and installer-script checks. Shell/Python syntax, local documentation links, and whitespace checks pass. The source change to DSP is a comment only; no audio or UI behavior changed, and no hardware tests or installation were performed for this licensing update.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

@@ -54,9 +54,11 @@ with tempfile.TemporaryDirectory(
         assert info[key] == source_info[key], key
     assert f'version="{info["CFBundleShortVersionString"]}"' in (component / "PackageInfo").read_text()
     assert (app / "Contents/Resources/AppIcon.icns").read_bytes() == (repo / "build/AppIcon.icns").read_bytes()
+    for name in ["LICENSE", "THIRD_PARTY_NOTICES.md"]:
+        assert (app / "Contents/Resources" / name).read_bytes() == (repo / name).read_bytes(), name
     for name in ["preinstall", "postinstall"]:
         assert (component / "Scripts" / name).read_bytes() == (repo / "Installer/scripts" / name).read_bytes()
         subprocess.run(["bash", "-n", str(component / "Scripts" / name)], check=True)
 
-print("PASS: package signatures, XPC identities, recovery spawn constraint, versions, icon, and scripts.")
+print("PASS: package signatures, XPC identities, recovery spawn constraint, versions, icon, license notices, and scripts.")
 print("Package SHA-256:", hashlib.sha256((repo / "dist/myEq.pkg").read_bytes()).hexdigest())

@@ -19,6 +19,7 @@ package_dir=$(mktemp -d "$artifacts/package.XXXXXX")
 trap 'rm -rf "$package_dir"' EXIT
 ditto "$artifacts/xcode/Build/Products/Release/myEq.app" "$package_dir/myEq.app"
 mkdir -p "$package_dir/myEq.app/Contents/Resources"
+cp LICENSE THIRD_PARTY_NOTICES.md "$package_dir/myEq.app/Contents/Resources/"
 mkdir -p "$package_dir/myEq.app/Contents/Helpers" "$package_dir/myEq.app/Contents/Library/LaunchAgents"
 cp build/native/myEqRecovery "$package_dir/myEq.app/Contents/Helpers/"
 python3 scripts/package-trust.py agent "$package_dir/myEq.app/Contents/Library/LaunchAgents/com.tc.myEq.recovery.plist" "$package_dir/myEq.app/Contents/Helpers/myEqRecovery"

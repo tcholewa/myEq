@@ -1,3 +1,6 @@
+// Biquad coefficient equations: Robert Bristow-Johnson's Audio EQ Cookbook,
+// as published by W3C (2021). See THIRD_PARTY_NOTICES.md for attribution,
+// adaptation details, and the W3C Software and Document License.
 #include "CDSP.h"
 #include <algorithm>
 #include <array>
