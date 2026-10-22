@@ -3,6 +3,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/native-tests
 common=(-std=c++17 -O2 -arch arm64 -mmacosx-version-min=27.0 -fobjc-arc -fblocks -I Sources/CTransport -I Sources/CDSP/include)
+if [ "${1:-}" = "installed-playback" ]; then
+  xcrun clang++ "${common[@]}" Tests/Native/PlaybackProbe.mm -framework AudioToolbox -framework CoreAudio -o build/native-tests/playback-probe
+  build/native-tests/playback-probe
+  exit
+fi
 if [ "${1:-}" = "installed-ipc" ]; then
   xcrun clang++ "${common[@]}" Tests/Native/IPCProbe.mm -framework Foundation -o build/native-tests/ipc-probe
   codesign --force --sign - --identifier com.tc.myEq.unauthorized-test build/native-tests/ipc-probe

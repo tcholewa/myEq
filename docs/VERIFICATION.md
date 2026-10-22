@@ -173,6 +173,14 @@ The user-assisted 0.3.1 launch failed before the helper could run. At 00:40:55, 
 
 The 0.3.2 package generates an explicit recovery `SpawnConstraint` from the already signed embedded executable, before signing the enclosing app. It keeps the existing identifier, service name, registration/approval flow, and all XPC checks. The Release build and checked-in package verification script pass, validating the exact launch constraint as well as signatures, trust identities, versions, icon, and install scripts. Shell syntax and whitespace checks pass. Live registration with the revised constraint remains to be checked after installation.
 
+The 0.3.2 installation completed at 06:19 on 2026-10-22. The receipt reports 0.3.2; launchd shows the recovery agent running under bundle version 5 with the explicit spawn constraint. Core Audio logs show myEq becoming the default media/system output. This confirms registration and route activation after the constraint change. It does not independently confirm audible playback or band focus behavior.
+
+## Music skipping tracks after installation
+
+The subsequent playback report was investigated against Music and Core Audio logs. Music process 61004 remained running across the 06:19 installer audio-service restart. Between 06:19:46 and 06:20:25, its AudioQueue startup failed 18 times with `268435459` (`0x10000003`, `MACH_SEND_INVALID_DEST` in the SDK's `mach/message.h`). Music also reported the same invalid destination on HAL property requests. The virtual route activated successfully during this period. These observations point to Music retaining a dead audio-service connection; a driver format or DSP fault has not been established.
+
+A user-assisted full quit/reopen of Music followed by playback with EQ enabled has been requested. The installer welcome/completion text and README now explain reopening playback apps after Core Audio reload. A standalone `installed-playback` probe checks fresh, silent AudioQueue clients against the already enabled virtual output without changing routes. It compiles and correctly refuses to run while EQ is bypassed; its live playback checks and the Music restart result remain pending.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

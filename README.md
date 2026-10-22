@@ -9,7 +9,7 @@ bash scripts/build-installer.sh
 open dist/myEq.pkg
 ```
 
-Quit myEq before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Its welcome screen explains that it **reloads Core Audio at the end of installation**, briefly interrupting sound in all apps, including calls and recordings. Install when that interruption is acceptable. This is needed after upgrades too: replacing the driver bundle can unload it even when the executable is unchanged. No full Mac restart is required.
+Quit myEq and audio playback apps, including Music, before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Its welcome screen explains that it **reloads Core Audio at the end of installation**, briefly interrupting sound in all apps, including calls and recordings. Install when that interruption is acceptable. This is needed after upgrades too: replacing the driver bundle can unload it even when the executable is unchanged. No full Mac restart is required. Reopen playback apps afterward so they reconnect to the audio service. If Music starts skipping tracks after an update, quit it completely with ⌘Q and reopen it before testing again.
 
 For an older installer, or if the driver still needs loading, reload Core Audio manually:
 
@@ -73,6 +73,8 @@ python3 scripts/verify-installer.py
 The native checks exercise ring concurrency and wraparound, real Apple AUVarispeed rendering, clock drift, output-only driver properties, and recovery with mocked hardware. Audio Unit tests need access to the system Audio Unit service and may not run inside a restricted sandbox.
 
 After installation, `bash scripts/test-native.sh installed-ipc` checks the real bridge's identity and rejection of wrong-version/unauthorized clients. It sends only handshake messages and does not change audio routing.
+
+With EQ already enabled, `bash scripts/test-native.sh installed-playback` starts fresh AudioQueue clients at 44.1, 48, and 96 kHz. It enqueues silence and checks callbacks, advancing sample time, and the preserved default output. It neither enables EQ nor changes routing, and exits with status 78 when myEq is not the active default output. This distinguishes driver startup failures from a playback app retaining a stale connection after a Core Audio reload.
 
 `render-design.sh` compiles a separate offscreen preview utility against the app views and core library. It writes Retina PNGs for the editor, compact editor, and menu states to `build/artifacts.noindex/design-preview`, and asserts that hidden surfaces do not recalculate their curves. It uses synthetic levels and settings, never captures the screen, and does not enable audio or save preferences. It currently uses Xcode 27’s SwiftPM product layout.
 
