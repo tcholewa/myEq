@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/tcholewa/myEq/actions/workflows/ci.yml/badge.svg)](https://github.com/tcholewa/myEq/actions/workflows/ci.yml)
 
+myEq began with a practical problem: desk speakers that sounded boomy. Room measurements revealed problems at specific frequencies, but macOS had no built-in system-wide equalizer to apply targeted corrections across all audio playback. The idea was to build a small app that could improve the sound of the whole system, with precise frequency adjustments and quick access from the menu bar.
+
+**All code in this project was generated using GPT-6 Astra.**
+
 A native macOS menu bar equalizer for your system's mixed stereo output. Shape your sound with eight parametric bands, save presets, and keep playback running when the editor is closed.
 
 **Apple Silicon · macOS 27+ · MIT licensed**
