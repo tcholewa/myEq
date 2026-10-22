@@ -5,11 +5,11 @@ cd "$(dirname "$0")/.."
 export MYEQ_SIGNING_MODE=production
 source scripts/signing.sh
 : "${MYEQ_NOTARY_PROFILE:?notarytool keychain profile required}"
-notary_keychain=()
-if [ -n "${MYEQ_KEYCHAIN:-}" ]; then notary_keychain=(--keychain "$MYEQ_KEYCHAIN"); fi
+notary_args=(--keychain-profile "$MYEQ_NOTARY_PROFILE" --wait --output-format json)
+if [ -n "${MYEQ_KEYCHAIN:-}" ]; then notary_args+=(--keychain "$MYEQ_KEYCHAIN"); fi
 bash scripts/build-installer.sh
 python3 scripts/verify-installer.py --production
-xcrun notarytool submit dist/myEq.pkg --keychain-profile "$MYEQ_NOTARY_PROFILE" "${notary_keychain[@]}" --wait --output-format json > build/notary-result.json
+xcrun notarytool submit dist/myEq.pkg "${notary_args[@]}" > build/notary-result.json
 python3 - <<'PY'
 import json
 from pathlib import Path

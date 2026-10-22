@@ -18,8 +18,8 @@ chmod 755 "$stage/scripts/preinstall" "$stage/scripts/postinstall"
 pkgbuild --analyze --root "$root" "$stage/components.plist"
 python3 scripts/package-trust.py components "$stage/components.plist"
 pkgbuild --root "$root" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.tc.myEq.installer --version 0.4.0 --install-location / "$stage/myEq-components.pkg"
-installer_signing=()
-if [ "$MYEQ_SIGNING_MODE" = production ]; then installer_signing=(--sign "$MYEQ_INSTALLER_IDENTITY" --timestamp); fi
-productbuild "${installer_signing[@]}" --distribution Installer/Distribution.xml --resources Installer/Resources --package-path "$stage" "$stage/myEq.pkg"
+product_args=(--distribution Installer/Distribution.xml --resources Installer/Resources --package-path "$stage")
+if [ "$MYEQ_SIGNING_MODE" = production ]; then product_args+=(--sign "$MYEQ_INSTALLER_IDENTITY" --timestamp); fi
+productbuild "${product_args[@]}" "$stage/myEq.pkg"
 mv "$stage/myEq.pkg" dist/myEq.pkg
 printf 'Installer: %s/dist/myEq.pkg\n' "$PWD"
