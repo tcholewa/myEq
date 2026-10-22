@@ -282,3 +282,10 @@ The adaptive draft above was rejected before installation or publication. The or
 The source renderer passed existing focus, selection and hidden-visual-work assertions and produced six fixtures. The standard menu now measures 354 × 498 pt, with the representative attention state at 354 × 606 pt. Enabled, attention and long-name fixtures were visually inspected. README preview and the menu specification match this refinement. Live interaction was not rechecked, and the installed app/audio route was not changed.
 
 The 0.4.1/build 8 Release installer builds under `/bin/bash`. Expanded-package verification, Swift formatting, repository/documentation checks and whitespace checks pass. Final package SHA-256: `a0ea4b00f4dd255b3862725e34daee0bf2a591e22d3edd05f303aeb322f211b9`. This revision has not been installed or pushed.
+
+
+## 0.4.1 installation and remote verification
+
+On 2026-10-22, the refined studio menu (`48b9435`) was pushed to `master` and its 0.4.1/build 8 package installed successfully. The receipt reports 0.4.1; all five installed component signatures match the installed trust manifest. Core Audio loaded the driver without a reboot, the bridge runs as `nobody`, and recovery runs under parent bundle version 8 without the previous registration workaround. The installed IPC probe authenticated the bridge and confirmed rejection of wrong protocol and unauthorized roles.
+
+Initial audio reconnection was delayed after the Core Audio reload; a diagnostic instance was stopped and an initial playback probe found no active myEq default route. After reopening myEq and Music, a fresh silent AudioQueue check passed at 44.1 kHz (64 callbacks), 48 kHz (70) and 96 kHz (140), with no startup/enqueue errors, advancing sample times and the virtual default route preserved. This verifies fresh-client transport, not an independent listening check. GitHub CI's Build and test job passed for `48b9435` (run `39780819552`).
