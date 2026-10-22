@@ -29,7 +29,9 @@ int meq_heartbeat(MEQConnection * _Null_unspecified, char * _Nonnull error, size
 void meq_close_transport(MEQConnection * _Nullable);
 void meq_disconnect(MEQConnection * _Nullable);
 MEQRenderer * _Nullable meq_renderer_create(MEQConnection * _Null_unspecified, MEQDSP * _Nonnull, double rate,
-  uint32_t bufferFrames, MEQChannel left, MEQChannel right, char * _Nonnull error, size_t capacity);
+  uint32_t bufferFrames, uint32_t sourceFrames, MEQChannel left, MEQChannel right, char * _Nonnull error, size_t capacity);
+// Control queue publishes source quantum changes; the callback consumes them atomically.
+bool meq_renderer_set_source_frames(MEQRenderer * _Nullable, uint32_t sourceFrames);
 void meq_renderer_destroy(MEQRenderer * _Nullable);
 MEQTransportHealth meq_transport_health(MEQRenderer * _Nullable);
 OSStatus meq_output_callback(AudioObjectID, const AudioTimeStamp * _Nonnull, const AudioBufferList * _Nonnull,

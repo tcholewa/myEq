@@ -11,7 +11,12 @@ final class VirtualOutputSession {
   private var renderer: OpaquePointer?
   private var io: AudioDeviceIOProcID?
   private var device: AudioObjectID = 0
+  private var sourceDevice: AudioObjectID = 0
   private var started = false
+  private var diagnosticTime: TimeInterval = 0
+  private var reportedUnderruns: UInt64 = 0
+  private var reportedOverruns: UInt64 = 0
+  private var reportedDiscontinuities: UInt64 = 0
   private var volume: HardwareVolume?
   deinit {
     stop()
@@ -63,9 +68,19 @@ final class VirtualOutputSession {
         return MEQChannel(buffer: -1, channel: 0, stride: 0)
       }
       let frames = try HAL.scalar(device, kAudioDevicePropertyBufferFrameSize, UInt32(0))
+      guard
+        let source = try HAL.ids(HAL.system, kAudioHardwarePropertyDevices).first(where: {
+          (try? HAL.string($0, kAudioDevicePropertyDeviceUID)) == "com.tc.myEq.output"
+        })
+      else {
+        throw AudioFailure(message: "The virtual output disappeared during audio setup.")
+      }
+      sourceDevice = source
+      let sourceFrames = try HAL.scalar(source, kAudioDevicePropertyBufferFrameSize, UInt32(0))
+      NSLog("myEq: audio buffers source=%u output=%u rate=%.0f", sourceFrames, frames, route.rate)
       try checked {
         renderer = meq_renderer_create(
-          connection, dsp, route.rate, frames,
+          connection, dsp, route.rate, frames, sourceFrames,
           location(Int(preferred[0]) - 1), location(Int(preferred[1]) - 1), $0, $1)
         return renderer != nil
       }
@@ -90,8 +105,28 @@ final class VirtualOutputSession {
   }
   /// 1 healthy, 2 manual output selection, 3 disconnected destination.
   func heartbeat() throws -> Int {
+    let sourceFrames = try HAL.scalar(sourceDevice, kAudioDevicePropertyBufferFrameSize, UInt32(0))
+    guard meq_renderer_set_source_frames(renderer, sourceFrames) else {
+      throw AudioFailure(message: "The virtual output buffer size is unsupported.")
+    }
     syncVolume()
-    if meq_transport_health(renderer).invalidSamples > 8 {
+    let health = meq_transport_health(renderer)
+    let time = ProcessInfo.processInfo.systemUptime
+    if time - diagnosticTime >= 5,
+      health.underruns != reportedUnderruns || health.overruns != reportedOverruns
+        || health.discontinuities != reportedDiscontinuities
+    {
+      // Control-queue diagnostics only, at most once per five seconds. No audio data.
+      NSLog(
+        "myEq: transport underruns=%llu overruns=%llu discontinuities=%llu buffered=%u ratio=%.6f",
+        health.underruns, health.overruns, health.discontinuities,
+        health.bufferedFrames, health.correction)
+      diagnosticTime = time
+      reportedUnderruns = health.underruns
+      reportedOverruns = health.overruns
+      reportedDiscontinuities = health.discontinuities
+    }
+    if health.invalidSamples > 8 {
       throw AudioFailure(
         message: "Invalid audio buffers. Ordinary playback has been restored; Retry to reconnect.")
     }
@@ -143,6 +178,7 @@ final class VirtualOutputSession {
     renderer = nil
     if let connection { meq_disconnect(connection) }
     connection = nil
+    sourceDevice = 0
     volume = nil
   }
 }

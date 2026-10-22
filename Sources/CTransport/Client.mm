@@ -16,13 +16,15 @@ struct MEQConnection {
   std::shared_ptr<Mapping> memory;
   uint64_t volumeSequence=0,generation=0;
 };
+static_assert(std::atomic<uint32_t>::is_always_lock_free);
 struct MEQRenderer {
   std::shared_ptr<Mapping> memory;
   MEQDSP *dsp;
   AudioUnit converter=nullptr;
   MEQChannel left,right;
   double rate;
-  uint32_t target,fade=0;
+  uint32_t outputFrames,target,fade=0;
+  std::atomic<uint32_t> sourceFrames{0};
   uint64_t discontinuity=0;
   bool primed=false,shortRead=false;
   Drift drift;
@@ -114,9 +116,9 @@ static OSStatus supply(void *context,AudioUnitRenderActionFlags *,const AudioTim
     auto p=static_cast<float*>(out->mBuffers[c].mData);for(UInt32 i=0;i<frames;i++)p[i]=r->input[i*2+c];
   }return noErr;
 }
-extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double rate,uint32_t frames,MEQChannel left,MEQChannel right,char *out,size_t size){
-  if(!c||!c->memory||!dsp||frames>4096||!frames){copyError(out,size,"Unsupported output buffer size.");return nullptr;}
-  auto r=std::make_unique<MEQRenderer>();r->memory=c->memory;r->dsp=dsp;r->rate=rate;r->left=left;r->right=right;r->target=std::max(256u,frames*2);
+extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double rate,uint32_t frames,uint32_t sourceFrames,MEQChannel left,MEQChannel right,char *out,size_t size){
+  if(!c||!c->memory||!dsp||frames>4096||!frames||!sourceFrames||sourceFrames>4096){copyError(out,size,"Unsupported output buffer size.");return nullptr;}
+  auto r=std::make_unique<MEQRenderer>();r->memory=c->memory;r->dsp=dsp;r->rate=rate;r->left=left;r->right=right;r->outputFrames=frames;r->sourceFrames=sourceFrames;r->target=std::max(256u,2*std::max(frames,sourceFrames));
   AudioComponentDescription description{kAudioUnitType_FormatConverter,kAudioUnitSubType_Varispeed,kAudioUnitManufacturer_Apple,0,0};
   auto component=AudioComponentFindNext(nullptr,&description);
   OSStatus status=component?AudioComponentInstanceNew(component,&r->converter):kAudio_ParamError;
@@ -129,6 +131,10 @@ extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double 
   if(!status)status=AudioUnitInitialize(r->converter);
   if(status){copyError(out,size,"Could not initialize clock-drift conversion (Core Audio "+std::to_string(status)+").");return nullptr;}
   return r.release();
+}
+extern "C" bool meq_renderer_set_source_frames(MEQRenderer *r,uint32_t frames){
+  if(!r||!frames||frames>4096)return false;
+  r->sourceFrames.store(frames,std::memory_order_relaxed);return true;
 }
 extern "C" void meq_renderer_destroy(MEQRenderer *r){delete r;}
 extern "C" MEQTransportHealth meq_transport_health(MEQRenderer *r){
@@ -145,6 +151,13 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
   };
   const uint32_t frames=count(r->left);
   if(!frames||frames!=count(r->right)||frames>8192){s->invalidSamples.fetch_add(1,std::memory_order_relaxed);return noErr;}
+  // Reserve two blocks of the larger clock domain, not just two hardware blocks.
+  // A 512-frame producer cannot continuously feed a 128-frame device from 256 frames.
+  const auto target=std::max(256u,2*std::max(r->outputFrames,r->sourceFrames.load(std::memory_order_relaxed)));
+  if(target!=r->target){
+    if(target>r->target)r->primed=false;
+    r->target=target;r->drift={};
+  }
   auto discontinuity=s->discontinuities.load(std::memory_order_acquire);
   if(discontinuity!=r->discontinuity){r->discontinuity=discontinuity;r->primed=false;discard(s);}
   bool ready=s->active.load(std::memory_order_acquire)&&now()<s->deadline.load(std::memory_order_relaxed);

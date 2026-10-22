@@ -17,7 +17,7 @@ cp Installer/scripts/preinstall Installer/scripts/postinstall build/native/myEqM
 chmod 755 "$stage/scripts/preinstall" "$stage/scripts/postinstall"
 pkgbuild --analyze --root "$root" "$stage/components.plist"
 python3 scripts/package-trust.py components "$stage/components.plist"
-pkgbuild --root "$root" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.tc.myEq.installer --version 0.4.1 --install-location / "$stage/myEq-components.pkg"
+pkgbuild --root "$root" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.tc.myEq.installer --version 0.4.2 --install-location / "$stage/myEq-components.pkg"
 product_args=(--distribution Installer/Distribution.xml --resources Installer/Resources --package-path "$stage")
 if [ "$MYEQ_SIGNING_MODE" = production ]; then product_args+=(--sign "$MYEQ_INSTALLER_IDENTITY" --timestamp); fi
 productbuild "${product_args[@]}" "$stage/myEq.pkg"

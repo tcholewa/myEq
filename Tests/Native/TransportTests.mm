@@ -41,7 +41,7 @@ static void renderTests(double driftPPM, double sampleRate=48000, bool planar=fa
   MEQChannel left=planar?MEQChannel{0,0,1}:MEQChannel{0,0,2};
   MEQChannel right=planar?MEQChannel{1,0,1}:MEQChannel{0,1,2};
   if(swapped)std::swap(left,right);
-  char error[512]{};auto r=meq_renderer_create(&connection,dsp,sampleRate,256,left,right,error,sizeof(error));
+  char error[512]{};auto r=meq_renderer_create(&connection,dsp,sampleRate,256,256,left,right,error,sizeof(error));
   if(!r){std::cerr<<error<<"\n";abort();}
   float source[2048],out[512];double phase=0;
   auto produce=[&](uint32_t n){for(uint32_t i=0;i<n;i++){source[i*2]=float(.25*sin(phase));source[i*2+1]=0;phase+=2*M_PI*440/sampleRate;}assert(write(s,source,n,0));};
@@ -77,4 +77,45 @@ static void renderTests(double driftPPM, double sampleRate=48000, bool planar=fa
   for(float v:out)assert(v==0);
   meq_renderer_destroy(r);meq_destroy(dsp);
 }
-int main(){@autoreleasepool{ringTests();renderTests(0);renderTests(300);renderTests(-300);renderTests(0,44100);renderTests(0,96000);renderTests(0,192000);renderTests(0,48000,true,true);renderTests(0,48000,false,true);std::cout<<"Native transport/render checks passed\n";}}
+// Independent producer/consumer clocks with different HAL quanta. The original
+// equal-block fixture never covered a 512-frame virtual output feeding 128 frames.
+static void batchedRenderTests(uint32_t sourceFrames,uint32_t outputFrames,double driftPPM=0,bool jitter=false){
+  constexpr double sampleRate=48000;
+  MEQConnection connection;connection.memory=std::make_shared<Mapping>();assert(connection.memory->create(sampleRate,123));
+  auto s=connection.memory->s;s->active=1;s->sourceRunning=1;s->deadline=UINT64_MAX;
+  auto dsp=meq_create();MEQBand bands[8]{};for(auto &b:bands){b.frequency=1000;b.width=1;}
+  assert(meq_prepare(dsp,sampleRate,bands,8,0));
+  char error[512]{};auto r=meq_renderer_create(&connection,dsp,sampleRate,outputFrames,sourceFrames,{0,0,2},{0,1,2},error,sizeof(error));assert(r);
+  assert(!meq_renderer_set_source_frames(r,0)&&!meq_renderer_set_source_frames(r,4097));
+  std::vector<float> source(sourceFrames*2),out(outputFrames*2);
+  AudioBufferList buffers{1,{{2,UInt32(out.size()*sizeof(float)),out.data()}}};
+  AudioBufferList input{0,{}};AudioTimeStamp ts{};ts.mFlags=kAudioTimeStampSampleTimeValid;
+  double sourceTime=0,phase=0;uint64_t block=0;
+  const double period=sourceFrames/(1+driftPPM/1e6);
+  // 320 simulated seconds for 128-frame outputs; includes clock drift settling.
+  for(int k=0;k<120000;k++){
+    ts.mSampleTime=double(k)*outputFrames;
+    while(sourceTime+(jitter&&block%7==3?outputFrames:0)<=ts.mSampleTime){
+      for(uint32_t i=0;i<sourceFrames;i++){source[i*2]=float(.25*sin(phase));source[i*2+1]=0;phase+=2*M_PI*440/sampleRate;}
+      assert(write(s,source.data(),sourceFrames,0));sourceTime+=period;++block;
+    }
+    assert(meq_output_callback(0,&ts,&input,&ts,&buffers,&ts,r)==noErr);
+    double energy=0;for(uint32_t i=0;i<outputFrames;i++){
+      assert(std::isfinite(out[i*2])&&fabs(out[i*2])<=.945&&out[i*2+1]==0);energy+=out[i*2]*out[i*2];
+    }
+    if(k>1000)assert(energy>0.001); // No silent/repriming blocks once started.
+  }
+  const auto h=meq_transport_health(r);
+  std::cout<<"batched source="<<sourceFrames<<" output="<<outputFrames<<" drift="<<driftPPM<<" jitter="<<jitter<<" underruns="<<h.underruns<<" overruns="<<h.overruns<<"\n";
+  assert(h.underruns==0&&h.overruns==0&&h.invalidSamples==0);
+  assert(h.bufferedFrames<4*std::max(sourceFrames,outputFrames));
+  // A source-quantum change is consumed safely without a control/audio data race.
+  assert(meq_renderer_set_source_frames(r,1024));
+  meq_output_callback(0,&ts,&input,&ts,&buffers,&ts,r);
+  assert(r->target==2048);
+  // An expired lease must still silence a well-buffered renderer.
+  s->deadline=0;meq_output_callback(0,&ts,&input,&ts,&buffers,&ts,r);
+  for(float value:out)assert(value==0);
+  meq_renderer_destroy(r);meq_destroy(dsp);
+}
+int main(){@autoreleasepool{ringTests();batchedRenderTests(512,128);batchedRenderTests(512,128,300,true);batchedRenderTests(512,128,-300,true);batchedRenderTests(512,256);batchedRenderTests(512,512,0,true);batchedRenderTests(1024,128);batchedRenderTests(128,512);renderTests(0);renderTests(300);renderTests(-300);renderTests(0,44100);renderTests(0,96000);renderTests(0,192000);renderTests(0,48000,true,true);renderTests(0,48000,false,true);std::cout<<"Native transport/render checks passed\n";}}

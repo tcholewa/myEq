@@ -72,7 +72,7 @@ Always install the app, driver, and helpers from the same package. Build artifac
 
 Volume and mute follow the physical device where supported. Fixed-volume hardware remains fixed-volume; myEq never forces the hardware to full volume or applies the same attenuation twice. Quit eqMac before using myEq to avoid competing virtual-output routing.
 
-The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu refreshes its cached 128-point response preview and does not enable live metering. When both surfaces are hidden, all visual calculations stop.
+The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu refreshes its cached 128-point response preview and does not enable live metering. When both surfaces are hidden, all visual calculations stop. Audio buffering accounts for both the virtual output and hardware block sizes, keeping a two-block reserve of the larger size to avoid starvation when they differ.
 
 ## Output compatibility
 
