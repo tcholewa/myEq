@@ -1,5 +1,7 @@
 # myEq
 
+[![CI](https://github.com/tcholewa/myEq/actions/workflows/ci.yml/badge.svg)](https://github.com/tcholewa/myEq/actions/workflows/ci.yml)
+
 A native macOS menu bar equalizer for your system's mixed stereo output. Shape your sound with eight parametric bands, save presets, and keep playback running when the editor is closed.
 
 **Apple Silicon · macOS 27+ · MIT licensed**
@@ -39,9 +41,11 @@ This is an early source release. The build produces an **ad-hoc-signed, non-nota
 
 ## Build and install
 
-Clone or download this repository, open a terminal in its root, and run:
+Clone and build the repository:
 
 ```sh
+git clone https://github.com/tcholewa/myEq.git
+cd myEq
 bash scripts/build-installer.sh
 python3 scripts/verify-installer.py
 open dist/myEq.pkg

@@ -213,6 +213,14 @@ Local verification passes on macOS 27.0.1 with Xcode 27.1: all **30 Swift tests*
 
 The workflow uses GitHub's hosted `xcode-27` Apple Silicon image and selects Xcode 27.1. Its test/build commands were verified locally; the first hosted execution remains pending. No GitHub repository was created, remote added, history rewritten, package installed, or release published during this preparation. Enabling private vulnerability reporting and repository rules remains part of GitHub setup, documented in `RELEASING.md`.
 
+## Public GitHub publication
+
+On 2026-10-22, the prepared repository was published at [tcholewa/myEq](https://github.com/tcholewa/myEq), preserving its existing history on the default `master` branch. GitHub recognizes the MIT license; both screenshots and the DSP notice are present in the public source. Private vulnerability reporting, secret scanning, and push protection are enabled. The repository's default Actions permissions are read-only, with workflow approval of pull requests disabled.
+
+The [first hosted CI run](https://github.com/tcholewa/myEq/actions/runs/39729969504) passed on source commit `ed52292`: repository checks, Swift tests, native tests normally and with AddressSanitizer, Swift formatting, installer build, and expanded-package verification. This resolves the hosted-run check left pending during repository preparation. The README now links to the live CI status and includes the repository's clone URL; the security policy links directly to private reporting.
+
+Publication did not install the package, change audio routing, upload a binary release, or add Developer ID signing/notarization. Hardware acceptance checks below remain separate from the successful hosted build.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

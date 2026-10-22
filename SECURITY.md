@@ -2,9 +2,9 @@
 
 ## Report a vulnerability
 
-Use **Security → Advisories → Report a vulnerability** on this GitHub repository to contact the maintainer privately when private vulnerability reporting is enabled. Do not include exploit details, credentials, or private logs in a public issue.
+Use [GitHub's private vulnerability reporting form](https://github.com/tcholewa/myEq/security/advisories/new) to contact the maintainer privately. You can also find it under **Security → Advisories → Report a vulnerability**. Do not include exploit details, credentials, or private logs in a public issue.
 
-If that option is unavailable, open an issue asking for a private reporting channel without disclosing the vulnerability. The maintainer must enable private vulnerability reporting when setting up the public repository; adding this file alone does not enable it.
+If that option is unavailable, open an issue asking for a private reporting channel without disclosing the vulnerability. Private vulnerability reporting is enabled for `tcholewa/myEq`; forks must enable it separately in their own repository settings.
 
 Include the affected version/commit, macOS version, required access, reproduction steps, expected/actual behavior, and impact. For audio/helper issues, identify the relevant driver, app, bridge, or recovery component. Share only the minimum information needed to reproduce the problem.
 

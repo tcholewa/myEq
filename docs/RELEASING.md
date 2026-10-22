@@ -1,17 +1,19 @@
 # GitHub setup and releases
 
-## Initial public repository
+## Repository setup
 
-The local repository is prepared for publication; no GitHub repository or remote is created by the build scripts. Create an empty GitHub repository without an auto-generated README, license, or `.gitignore`, then add its URL as `origin` and push the existing branch. Keep the current branch/history unless the maintainer explicitly chooses a different publication history. Commit author names and emails are public when history is pushed.
+The public repository is [tcholewa/myEq](https://github.com/tcholewa/myEq), with `master` as its default branch. The local `origin` remote points to `https://github.com/tcholewa/myEq.git`. Publication preserves the existing commit history, including author names and emails.
+
+For a separate fork or mirror, create an empty GitHub repository without an auto-generated README, license, or `.gitignore`, then add its URL as a remote and push the intended branch. The build scripts do not create repositories or push source.
 
 Suggested repository description: **Native macOS menu bar equalizer with eight parametric bands and a shared-memory virtual output driver.**
 
 Suggested topics: `macos`, `audio`, `equalizer`, `swift`, `swiftui`, `coreaudio`, `menu-bar`.
 
-After creating the repository:
+When setting up a fork or reviewing the upstream configuration:
 
 1. Enable Issues and [private vulnerability reporting](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository). The issue forms and security policy are already included.
-2. Let the **CI / Build and test** workflow finish on the first push. It requires GitHub's hosted `xcode-27` Apple Silicon image; its first hosted run remains a publication-time check.
+2. Let the **CI / Build and test** workflow finish on the first push. It requires GitHub's hosted `xcode-27` Apple Silicon image. Check the [workflow runs](https://github.com/tcholewa/myEq/actions/workflows/ci.yml) for the upstream status.
 3. Use branch protection/rulesets appropriate to the maintainer workflow, with the build/test check required once it has run successfully. Keep Actions permissions read-only by default and require review of workflow changes from outside contributors.
 4. Enable available secret scanning and push protection. A local pattern scan is not a substitute for these checks.
 
