@@ -9,7 +9,7 @@ sources=()
 for source in Sources/MyEqApp/*.swift; do
   if [ "$(basename "$source")" != MyEqApp.swift ]; then sources+=("$source"); fi
 done
-xcrun swiftc -parse-as-library -swift-version 5 -O -module-name MyEqDesignPreview \
+xcrun swiftc -parse-as-library -swift-version 5 -O -g -module-name MyEqDesignPreview \
   -I "$products" -I .build/out/Intermediates.noindex/GeneratedModuleMaps \
   -I Sources/CDSP/include -I Sources/CTransport/include \
   -Xcc -fmodule-map-file=.build/out/Intermediates.noindex/GeneratedModuleMaps/CDSP.modulemap \

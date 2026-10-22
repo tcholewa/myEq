@@ -31,44 +31,66 @@ struct DesignPreview {
     let hiddenCurves = model.curves
     model.edit { $0.bands[0].gain = 6 }
     drain()
-    precondition(model.curves == hiddenCurves && model.menuCurve.isEmpty)
+    precondition(model.curves == hiddenCurves)
     model.setMenuVisible(true)
     drain()
-    precondition(
-      model.menuCurve.count == 128 && model.curves == hiddenCurves && !model.isEditorVisible)
-    let menuCurve = model.menuCurve
-    model.setMenuVisible(false)
+    precondition(model.curves == hiddenCurves && !model.isEditorVisible)
     model.edit { $0.bands[0].gain = 4.8 }
     drain()
-    precondition(model.menuCurve == menuCurve && model.curves == hiddenCurves)
-    model.setMenuVisible(true)
-    drain()
-    precondition(model.menuCurve != menuCurve)
-    try render(
-      MenuBarPanel(model: model), width: 354, to: directory.appendingPathComponent("menu.png"))
-    model.saved.enabled = false
-    model.engineStatus.state = .bypassed
-    try render(
-      MenuBarPanel(model: model), width: 354,
-      to: directory.appendingPathComponent("menu-bypassed.png"))
-    model.engineStatus.state = .error("Connect an audio output. EQ will resume automatically.")
-    try render(
-      MenuBarPanel(model: model), width: 354,
-      to: directory.appendingPathComponent("menu-attention.png"))
-    model.engineStatus.state = .running
-    model.saved.enabled = true
-    model.saved.current.name = "An exceptionally long personal preset name for evening listening"
-    model.engineStatus.outputName = "Living Room Studio Monitors — USB Audio Interface"
-    try render(
-      MenuBarPanel(model: model), width: 354,
-      to: directory.appendingPathComponent("menu-long-names.png"))
+    precondition(model.curves == hiddenCurves)
+    for scheme in [ColorScheme.dark, .light] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      model.saved.current = .botaniq
+      model.saved.enabled = true
+      model.engineStatus.state = .running
+      model.engineStatus.outputName = "ADAM Audio D3V"
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-\(suffix).png"))
+      model.saved.enabled = false
+      model.engineStatus.state = .bypassed
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-bypassed-\(suffix).png"))
+      model.saved.enabled = true
+      model.engineStatus.state = .starting
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-starting-\(suffix).png"))
+      model.engineStatus.state = .error(
+        "The audio helper could not connect. Open Audio Setup to allow myEq, then retry.")
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-attention-\(suffix).png"))
+      model.engineStatus.state = .suspended(
+        "Connect your speakers to resume equalizing. Ordinary playback is still available.")
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-paused-\(suffix).png"))
+      model.engineStatus.state = .running
+      model.saved.current.name = "An exceptionally long personal preset name for evening listening"
+      model.engineStatus.outputName = "Living Room Studio Monitors — USB Audio Interface"
+      try render(
+        MenuBarPanel(model: model), width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-long-names-\(suffix).png"))
+      model.saved.current = .botaniq
+      model.engineStatus.outputName = "ADAM Audio D3V"
+      try render(
+        MenuBarPanel(model: model)
+          .environment(
+            \.menuPanelAccessibility,
+            MenuPanelAccessibility(
+              reduceTransparency: true, reduceMotion: true, increaseContrast: true)),
+        width: 344, scheme: scheme,
+        to: directory.appendingPathComponent("menu-accessible-\(suffix).png"))
+    }
     model.setMenuVisible(false)
     model.setEditorVisible(true)
     model.edit { $0.bands[0].gain = 5 }
     drain()
     precondition(model.curves.count == 8 && model.curves[0] != hiddenCurves[0])
     print(
-      "PASS: hidden editor/menu graphs stay parked; opening the menu computes only its static preview."
+      "PASS: the menu never starts graph computation or metering; editor graphs resume on show."
     )
   }
 
@@ -180,10 +202,12 @@ struct DesignPreview {
 
   @MainActor
   static func render<Content: View>(
-    _ content: Content, width: CGFloat, height: CGFloat? = nil, to url: URL
+    _ content: Content, width: CGFloat, height: CGFloat? = nil, scheme: ColorScheme = .dark,
+    to url: URL
   ) throws {
+    NSApp.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
     let view = NSHostingView(
-      rootView: content.frame(width: width, height: height).preferredColorScheme(.dark))
+      rootView: content.frame(width: width, height: height).preferredColorScheme(scheme))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height ?? 800),
       styleMask: [.borderless], backing: .buffered, defer: false)

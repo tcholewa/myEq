@@ -12,7 +12,6 @@ final class AppModel: ObservableObject {
   @Published var selectedBand: Int? = nil
   @Published var curves: [[Double]] = []
   @Published var combined: [Double] = []
-  @Published var menuCurve: [Double] = []
   @Published var effectivePreamp = 0.0
   @Published var launchAtLogin = false
   @Published private(set) var isEditorVisible = false
@@ -190,18 +189,12 @@ final class AppModel: ObservableObject {
     outputMeter.reset()
     graphWork?.cancel()
     graphWork = nil
-    if visible || isMenuVisible { refreshGraph() }
+    if visible { refreshGraph() }
   }
   func setMenuVisible(_ visible: Bool) {
     guard isMenuVisible != visible else { return }
     isMenuVisible = visible
-    // The menu has a static response preview; it never enables DSP metering.
-    if visible {
-      refreshGraph()
-    } else if !isEditorVisible {
-      graphWork?.cancel()
-      graphWork = nil
-    }
+    // The menu contains controls only. It never starts graph computation or metering.
   }
   func closeMenu() {
     menuWindow?.orderOut(nil)
@@ -296,24 +289,17 @@ final class AppModel: ObservableObject {
   func refreshGraph() {
     graphWork?.cancel()
     graphWork = nil
-    guard isEditorVisible || isMenuVisible else { return }
+    guard isEditorVisible else { return }
     let work = DispatchWorkItem { [weak self] in
-      guard let self, self.isEditorVisible || self.isMenuVisible else { return }
+      guard let self, self.isEditorVisible else { return }
       let rate = max(32000, self.engineStatus.sampleRate)
       let preset = self.saved.current
       self.effectivePreamp =
         preset.autoPreamp
         ? EQResponse.autoPreamp(preset.bands, sampleRate: rate) : preset.manualPreamp
-      if self.isEditorVisible {
-        self.curves = preset.bands.map { EQResponse.curve([$0], sampleRate: rate) }
-        self.combined = EQResponse.curve(preset.bands, sampleRate: rate).map {
-          $0 + self.effectivePreamp
-        }
-      }
-      if self.isMenuVisible {
-        self.menuCurve = EQResponse.curve(preset.bands, sampleRate: rate, count: 128).map {
-          $0 + self.effectivePreamp
-        }
+      self.curves = preset.bands.map { EQResponse.curve([$0], sampleRate: rate) }
+      self.combined = EQResponse.curve(preset.bands, sampleRate: rate).map {
+        $0 + self.effectivePreamp
       }
     }
     graphWork = work

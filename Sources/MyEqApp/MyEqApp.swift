@@ -27,7 +27,7 @@ struct MyEqApp: App {
       }
     }
     MenuBarExtra {
-      MenuBarPanel(model: model).preferredColorScheme(.dark)
+      MenuBarPanel(model: model)
     } label: {
       Image(nsImage: Studio.statusIcon)
         .accessibilityLabel("myEq · \(model.engineStatus.state.title)")

@@ -18,7 +18,10 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Menu bar**
 
-<img src="Screenshot%20MenuBar.png" width="354" alt="myEq menu bar panel with output selection, preset controls, and EQ bypass">
+<img src="docs/images/menu-light.png" width="344" alt="Light menu panel with status, output, preset and native EQ switch">
+<img src="docs/images/menu-dark.png" width="344" alt="Dark menu panel with status, output, preset and native EQ switch">
+
+Menu previews are rendered from source; native popover chrome and wallpaper vibrancy are not shown.
 
 ## Features
 
@@ -65,12 +68,12 @@ Always install the app, driver, and helpers from the same package. Build artifac
 
 1. Choose your physical speakers or headphones using **Output** in myEq, then enable EQ. myEq redirects the default media and system-sound mix through its virtual output, named **myEq: {physical output name}** in macOS (for example, **myEq: ADAM Audio D3V**). The name follows output changes and returns to **myEq** when no session is attached.
 2. Start with **Flat**, or **Botaniq1** for the seven reference bands. The eighth band is initially disabled. Edit numeric fields, faders, or graph points; save personal presets with **Save preset**. The editor starts with no band selected; clicking outside a band clears its highlight and field focus. Double-click a gain fader or width dial to reset it; exact values remain directly editable. The preset’s **…** menu contains rename, update, restore, and delete actions.
-3. Closing or hiding the window keeps audio processing active. The menu bar opens a compact panel with the destination, a static response preview, preset selection, quick Flat/Botaniq1 buttons, bypass, and **Open equalizer**. **Options** contains launch at login and Background Items. ⌘⇧E opens the editor from the panel; ⌘E toggles EQ and ⌘0 selects Flat in the editor.
+3. Closing or hiding the window keeps audio processing active. The menu bar opens a compact panel with status, a native EQ switch, output and preset selectors, and **Open Equalizer**. **Options** contains launch at login and Audio Setup. The panel follows system light/dark appearance; see the [menu design specification](docs/MENU-DESIGN.md). ⌘⇧E opens the editor from the panel; ⌘E toggles EQ and ⌘0 selects Flat in the editor.
 4. Selecting a physical output in macOS bypasses EQ. If the current destination disconnects, myEq follows an available physical fallback and resumes when supported. It does not automatically switch back when the disconnected device returns.
 
 Volume and mute follow the physical device where supported. Fixed-volume hardware remains fixed-volume; myEq never forces the hardware to full volume or applies the same attenuation twice. Quit eqMac before using myEq to avoid competing virtual-output routing.
 
-The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu computes a small static response; it does not enable live metering. When both surfaces are hidden, all visual calculations stop.
+The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu computes no response curves and does not enable live metering. When both surfaces are hidden, all visual calculations stop.
 
 ## Output compatibility
 

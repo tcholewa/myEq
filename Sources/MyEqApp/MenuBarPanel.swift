@@ -2,216 +2,405 @@ import AppKit
 import MyEqCore
 import SwiftUI
 
+/// An injectable rendering policy for offscreen previews; nil uses macOS preferences.
+struct MenuPanelAccessibility {
+  var reduceTransparency = false
+  var reduceMotion = false
+  var increaseContrast = false
+}
+
+private struct MenuPanelAccessibilityKey: EnvironmentKey {
+  static let defaultValue: MenuPanelAccessibility? = nil
+}
+
+extension EnvironmentValues {
+  var menuPanelAccessibility: MenuPanelAccessibility? {
+    get { self[MenuPanelAccessibilityKey.self] }
+    set { self[MenuPanelAccessibilityKey.self] = newValue }
+  }
+}
+
+/// A quick control surface. Editing and technical readouts belong in the equalizer window.
 struct MenuBarPanel: View {
   @ObservedObject var model: AppModel
   @Environment(\.openWindow) private var openWindow
-  var body: some View {
-    VStack(spacing: 18) {
-      HStack(spacing: 10) {
-        EqualizerMark().frame(width: 33, height: 33)
-          .background(RoundedRectangle(cornerRadius: 10).fill(Studio.accent.opacity(0.07)))
-        VStack(alignment: .leading, spacing: 4) {
-          Text("myEq").font(.system(size: 19, weight: .semibold, design: .rounded)).tracking(-0.5)
-          StatusLabel(state: model.engineStatus.state)
-        }
-        Spacer()
-        PowerControl(model: model, compact: true)
-      }
-      OutputSelector(model: model, compact: true)
-      if let detail = model.engineStatus.state.detail {
-        VStack(alignment: .leading, spacing: 10) {
-          Label(detail, systemImage: "exclamationmark.circle")
-            .font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(Studio.accent)
-          if model.installationIssue == nil {
-            HStack {
-              Button("Background Items") { model.showAudioSetup() }
-              Spacer()
-              Button("Retry") { model.retryAudio() }
-            }.buttonStyle(StudioButtonStyle(compact: true))
-          }
-        }.padding(12).background(
-          RoundedRectangle(cornerRadius: 12).fill(Studio.accent.opacity(0.05)))
-      }
-      presetSection
-      HStack(spacing: 0) {
-        VStack(alignment: .leading, spacing: 6) {
-          SectionCaption(model.saved.current.autoPreamp ? "Auto preamp" : "Preamp")
-          HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(String(format: "%+.1f", model.effectivePreamp))
-              .font(.system(size: 18, weight: .medium, design: .monospaced))
-            Text("dB").font(.system(size: 10)).foregroundStyle(Studio.secondary)
-          }
-        }
-        Spacer()
-        Rectangle().fill(Studio.line).frame(width: 1, height: 31)
-        Spacer()
-        VStack(alignment: .leading, spacing: 6) {
-          SectionCaption("Stereo output")
-          HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(String(format: "%.1f", model.engineStatus.sampleRate / 1000))
-              .font(.system(size: 18, weight: .medium, design: .monospaced))
-            Text("kHz").font(.system(size: 10)).foregroundStyle(Studio.secondary)
-          }
-        }
-      }.padding(.horizontal, 12)
-      Button {
-        model.closeMenu()
-        openWindow(id: "equalizer")
-        NSApp.activate(ignoringOtherApps: true)
-      } label: {
-        HStack {
-          Text("Open equalizer")
-          Spacer()
-          Text("⌘⇧E").font(.system(size: 10, weight: .regular)).opacity(0.45)
-          Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold))
-        }.frame(maxWidth: .infinity).padding(.vertical, 2)
-      }
-      .buttonStyle(StudioButtonStyle(prominent: true))
-      .keyboardShortcut("e", modifiers: [.command, .shift])
-      HStack {
-        PopupMenuButton {
-          let menu = ActionMenu()
-          menu.choice(
-            "Launch at Login", selected: model.launchAtLogin, enabled: model.isInstalledApp
-          ) {
-            model.setLaunchAtLogin(!model.launchAtLogin)
-          }
-          menu.choice("Background Items…") { model.showAudioSetup() }
-          return menu
-        } label: {
-          Label("Options", systemImage: "gearshape").font(.system(size: 10))
-        }
-        .fixedSize()
-        Spacer()
-        Button("Quit myEq") { NSApp.terminate(nil) }
-          .buttonStyle(.plain).font(.system(size: 10)).keyboardShortcut("q")
-      }.foregroundStyle(Studio.secondary)
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.menuPanelAccessibility) private var accessibilityOverride
+  @Environment(\.colorSchemeContrast) private var contrast
+  @FocusState private var focus: Control?
+  private var accessibility: MenuPanelAccessibility {
+    accessibilityOverride
+      ?? MenuPanelAccessibility(
+        reduceTransparency: reduceTransparency, reduceMotion: reduceMotion,
+        increaseContrast: contrast == .increased)
+  }
+  private var borderWidth: CGFloat { accessibility.increaseContrast ? 1 : 0.5 }
+  private var showsRecoveryActions: Bool {
+    guard model.installationIssue == nil else { return false }
+    if case .error = model.engineStatus.state { return true }
+    return false
+  }
+
+  private enum Control: Hashable {
+    case power, output, preset, setup, retry, editor, options, quit
+  }
+
+  private var controls: [Control] {
+    var result: [Control] = model.installationIssue == nil ? [.power] : []
+    result += [.output, .preset]
+    if showsRecoveryActions {
+      result += [.setup, .retry]
     }
-    .padding(20).frame(width: 354)
-    .foregroundStyle(Studio.ink).tint(Studio.accent)
-    .background(Studio.background)
+    return result + [.editor, .options, .quit]
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      header.padding(16)
+      VStack(spacing: 8) {
+        VStack(spacing: 0) {
+          outputRow
+          Divider().padding(.leading, 48)
+          presetRow
+        }
+        .background {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(
+              Color(nsColor: .controlBackgroundColor).opacity(
+                accessibility.reduceTransparency ? 1 : 0.55))
+        }
+        .overlay {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(Color(nsColor: .separatorColor), lineWidth: borderWidth)
+            .allowsHitTesting(false)
+        }
+        if let detail = model.engineStatus.state.detail {
+          notice(detail).transition(.opacity)
+        }
+        Button(action: showEqualizer) {
+          HStack(spacing: 10) {
+            Image(systemName: "slider.horizontal.3").symbolRenderingMode(.hierarchical)
+              .frame(width: 20)
+            Text("Open Equalizer")
+            Spacer()
+            ShortcutHint("⇧⌘E")
+          }
+          .font(.system(.subheadline, design: .default))
+          .padding(.horizontal, 12).frame(minHeight: 36)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuPanelButtonStyle())
+        .focused($focus, equals: .editor)
+        .keyboardShortcut("e", modifiers: [.command, .shift])
+        .help("Open the full equalizer · ⇧⌘E")
+      }
+      .padding(.horizontal, 12).padding(.bottom, 8)
+      Divider()
+      footer.padding(.horizontal, 12).padding(.vertical, 6)
+    }
+    .environment(\.menuPanelAccessibility, accessibility)
+    .frame(width: 344)
+    .foregroundStyle(.primary)
+    .background {
+      if accessibility.reduceTransparency {
+        Color(nsColor: .windowBackgroundColor)
+      } else {
+        Rectangle().fill(.ultraThinMaterial)
+      }
+    }
+    // MenuBarExtra owns the window's outer corners, shadow and screen-edge positioning.
+    .animation(
+      accessibility.reduceMotion ? nil : .easeInOut(duration: 0.16),
+      value: model.engineStatus.state.detail
+    )
+    .onMoveCommand(perform: moveFocus)
+    .onExitCommand { model.closeMenu() }
+    .onChange(of: model.isMenuVisible) { _, visible in
+      if !visible { focus = nil }
+    }
     .background(
       EditorVisibilityObserver(onChange: model.setMenuVisible, onWindow: { model.menuWindow = $0 })
     )
   }
-  private var presetSection: some View {
+
+  private var header: some View {
+    HStack(spacing: 10) {
+      Image(systemName: "slider.horizontal.3")
+        .font(.system(.title3, design: .default, weight: .medium))
+        .symbolRenderingMode(.hierarchical)
+        .foregroundStyle(Color.accentColor)
+        .frame(width: 34, height: 34)
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 3) {
+        Text("myEq").font(.system(.headline, design: .default))
+        MenuPanelStatus(state: model.engineStatus.state)
+      }
+      Spacer(minLength: 12)
+      Toggle(
+        "Enable equalizer",
+        isOn: Binding(
+          get: { model.saved.enabled }, set: { model.setEnabled($0) }
+        )
+      )
+      .labelsHidden().toggleStyle(.switch).controlSize(.small)
+      .disabled(model.installationIssue != nil)
+      .focused($focus, equals: .power)
+      .keyboardShortcut("e", modifiers: .command)
+      .accessibilityHint("Bypass preserves your preset and keeps ordinary playback available.")
+      .help(model.saved.enabled ? "Bypass equalizer · ⌘E" : "Enable equalizer · ⌘E")
+    }
+    .frame(minHeight: 38)
+  }
+
+  private var outputRow: some View {
+    PopupMenuButton {
+      let menu = ActionMenu()
+      if model.engineStatus.outputs.isEmpty {
+        menu.choice("No output connected", enabled: false) {}
+      }
+      for output in model.engineStatus.outputs {
+        menu.choice(output.name, selected: output.id == model.engineStatus.selectedOutputUID) {
+          model.selectOutput(output.id)
+        }
+      }
+      return menu
+    } label: {
+      MenuPanelSelectionRow(
+        title: "Output", value: model.engineStatus.outputName, symbol: "speaker.wave.2"
+      )
+    }
+    .focused($focus, equals: .output)
+    .accessibilityLabel("Audio output")
+    .accessibilityValue(model.engineStatus.outputName)
+    .accessibilityHint("Opens the list of speakers and headphones.")
+    .help("\(model.engineStatus.outputName) · Choose speakers or headphones")
+  }
+
+  private var presetRow: some View {
+    PopupMenuButton {
+      let menu = ActionMenu()
+      for preset in model.allPresets {
+        menu.choice(preset.name, selected: preset.id == model.saved.current.id) {
+          model.selectPreset(preset.id)
+        }
+      }
+      return menu
+    } label: {
+      MenuPanelSelectionRow(
+        title: "Preset", value: model.saved.current.name, symbol: "line.3.horizontal.decrease",
+        edited: model.isModified
+      )
+    }
+    .focused($focus, equals: .preset)
+    .accessibilityLabel("Sound preset")
+    .accessibilityValue(model.saved.current.name + (model.isModified ? ", edited" : ""))
+    .accessibilityHint("Opens your presets. Selecting one replaces current edits.")
+    .help("\(model.saved.current.name)\(model.isModified ? " · Edited" : "") · Choose preset")
+  }
+
+  private func notice(_ detail: String) -> some View {
     VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        SectionCaption("Your sound")
-        Spacer()
-        if model.isModified {
-          Circle().fill(Studio.accent).frame(width: 4, height: 4)
-          Text("Edited").font(.system(size: 9)).foregroundStyle(Studio.accent)
-        }
-      }
-      PopupMenuButton {
-        let menu = ActionMenu()
-        for preset in model.allPresets {
-          menu.choice(preset.name, selected: preset.id == model.saved.current.id) {
-            model.selectPreset(preset.id)
-          }
-        }
-        return menu
-      } label: {
+      Text(detail)
+        .font(.system(.subheadline, design: .default))
+        .fixedSize(horizontal: false, vertical: true)
+      if showsRecoveryActions {
         HStack {
-          Text(model.saved.current.name).font(.system(size: 23, weight: .medium))
-            .tracking(-0.6).lineLimit(1)
+          Button("Audio Setup…") { model.showAudioSetup() }
+            .focused($focus, equals: .setup)
           Spacer()
-          Image(systemName: "chevron.down").font(.system(size: 10, weight: .medium))
-            .foregroundStyle(Studio.secondary)
-        }.foregroundStyle(Studio.ink).contentShape(Rectangle())
-      }
-      .accessibilityLabel("Choose preset").accessibilityValue(model.saved.current.name)
-      .help(model.saved.current.name)
-      MiniResponseGraph(values: model.menuCurve, enabled: model.saved.enabled)
-        .frame(height: 90)
-      HStack(spacing: 8) {
-        quickPreset(.flat, subtitle: "Neutral")
-        quickPreset(.botaniq, subtitle: "Reference")
+          Button("Retry") { model.retryAudio() }
+            .focused($focus, equals: .retry)
+        }
+        .buttonStyle(.bordered).controlSize(.small)
       }
     }
-    .padding(15).background(RoundedRectangle(cornerRadius: 14).fill(Studio.surface))
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Studio.line))
+    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    .overlay {
+      RoundedRectangle(cornerRadius: 10).strokeBorder(
+        Color(nsColor: .separatorColor), lineWidth: borderWidth)
+    }
   }
-  private func quickPreset(_ preset: EQPreset, subtitle: String) -> some View {
-    let selected = model.saved.current.id == preset.id && !model.isModified
-    return Button {
-      model.selectPreset(preset.id)
-    } label: {
-      HStack(spacing: 7) {
-        Circle().strokeBorder(
-          selected ? Studio.accent : Studio.secondary.opacity(0.4), lineWidth: 1
-        )
-        .background(Circle().fill(selected ? Studio.accent : .clear).padding(3))
-        .frame(width: 12, height: 12)
-        VStack(alignment: .leading, spacing: 3) {
-          Text(preset.name).font(.system(size: 10, weight: .medium))
-            .foregroundStyle(selected ? Studio.ink : Studio.secondary)
-          Text(subtitle).font(.system(size: 8)).foregroundStyle(Studio.secondary.opacity(0.7))
+
+  private var footer: some View {
+    HStack(spacing: 0) {
+      PopupMenuButton {
+        let menu = ActionMenu()
+        menu.choice("Launch at Login", selected: model.launchAtLogin, enabled: model.isInstalledApp)
+        {
+          model.setLaunchAtLogin(!model.launchAtLogin)
         }
-        Spacer(minLength: 0)
+        menu.choice("Audio Setup…") { model.showAudioSetup() }
+        return menu
+      } label: {
+        MenuPanelUtilityLabel(title: "Options", symbol: "gearshape")
       }
-      .padding(9).frame(maxWidth: .infinity)
-      .background(
-        RoundedRectangle(cornerRadius: 8).fill(
-          selected ? Studio.accent.opacity(0.065) : .black.opacity(0.12))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 8).strokeBorder(
-          selected ? Studio.accent.opacity(0.20) : .clear))
-    }.buttonStyle(.plain).accessibilityLabel("\(preset.name) preset")
-      .accessibilityAddTraits(selected ? .isSelected : [])
+      .focused($focus, equals: .options)
+      .accessibilityLabel("Options")
+      .help("Launch at login and audio setup")
+      Spacer()
+      Button {
+        NSApp.terminate(nil)
+      } label: {
+        HStack(spacing: 12) {
+          Text("Quit myEq")
+          ShortcutHint("⌘Q")
+        }
+        .font(.system(.caption, design: .default))
+        .padding(.horizontal, 8).frame(minHeight: 30).contentShape(Rectangle())
+      }
+      .buttonStyle(MenuPanelButtonStyle())
+      .focused($focus, equals: .quit)
+      .keyboardShortcut("q")
+    }
+  }
+
+  private func showEqualizer() {
+    model.closeMenu()
+    openWindow(id: "equalizer")
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  private func moveFocus(_ direction: MoveCommandDirection) {
+    guard direction == .up || direction == .down else { return }
+    let order = controls
+    let step = direction == .down ? 1 : -1
+    let current = focus.flatMap { order.firstIndex(of: $0) } ?? (step == 1 ? -1 : order.count)
+    focus = order[(current + step + order.count) % order.count]
   }
 }
 
-struct MiniResponseGraph: View {
-  let values: [Double]
-  let enabled: Bool
-  var body: some View {
-    Canvas { context, size in
-      let plot = CGRect(x: 1, y: 4, width: size.width - 2, height: size.height - 22)
-      for fraction in [0.0, 0.25, 0.5, 0.75, 1] {
-        var line = Path()
-        let x = plot.minX + fraction * plot.width
-        line.move(to: CGPoint(x: x, y: plot.minY))
-        line.addLine(to: CGPoint(x: x, y: plot.maxY))
-        context.stroke(line, with: .color(.white.opacity(0.035)), lineWidth: 1)
-      }
-      var zero = Path()
-      zero.move(to: CGPoint(x: plot.minX, y: plot.midY))
-      zero.addLine(to: CGPoint(x: plot.maxX, y: plot.midY))
-      context.stroke(
-        zero, with: .color(.white.opacity(0.10)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
-      var curve = Path()
-      for (index, value) in values.enumerated() {
-        let point = CGPoint(
-          x: plot.minX + Double(index) / Double(max(1, values.count - 1)) * plot.width,
-          y: plot.midY - min(24, max(-24, value)) / 48 * plot.height)
-        if index == 0 { curve.move(to: point) } else { curve.addLine(to: point) }
-      }
-      if !values.isEmpty {
-        var fill = curve
-        fill.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
-        fill.addLine(to: CGPoint(x: plot.minX, y: plot.maxY))
-        fill.closeSubpath()
-        context.fill(
-          fill,
-          with: .linearGradient(
-            Gradient(colors: [Studio.accent.opacity(enabled ? 0.15 : 0.04), .clear]),
-            startPoint: CGPoint(x: 0, y: plot.minY), endPoint: CGPoint(x: 0, y: plot.maxY)))
-        context.stroke(
-          curve, with: .color(Studio.accent.opacity(enabled ? 0.9 : 0.3)),
-          style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
-      }
-      for (text, fraction) in [("20", 0.03), ("1k", 0.57), ("20k", 0.95)] {
-        context.draw(
-          Text(text).font(.system(size: 8, design: .monospaced)).foregroundColor(
-            Studio.secondary.opacity(0.7)),
-          at: CGPoint(x: plot.minX + fraction * plot.width, y: size.height - 5))
-      }
+private struct MenuPanelStatus: View {
+  let state: AudioEngineState
+  private var symbol: String {
+    switch state {
+    case .running: "checkmark.circle.fill"
+    case .bypassed: "pause.circle"
+    case .starting: "ellipsis.circle"
+    case .suspended: "pause.circle.fill"
+    case .error: "exclamationmark.circle.fill"
     }
-    .accessibilityLabel("Preset frequency response")
-    .accessibilityValue(enabled ? "Equalizer enabled" : "Equalizer bypassed")
+  }
+  private var color: Color {
+    switch state {
+    case .running: Color(nsColor: .systemGreen)
+    case .error, .suspended: Color(nsColor: .systemOrange)
+    default: .secondary
+    }
+  }
+  var body: some View {
+    Label {
+      Text(state.title).modifier(MenuPanelSecondary())
+    } icon: {
+      Image(systemName: symbol).symbolRenderingMode(.hierarchical).foregroundStyle(color)
+    }
+    .font(.system(.caption, design: .default))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Equalizer status")
+    .accessibilityValue(state.title)
+  }
+}
+
+private struct MenuPanelSelectionRow: View {
+  let title: String
+  let value: String
+  let symbol: String
+  var edited = false
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: symbol)
+        .font(.system(.body, design: .default))
+        .symbolRenderingMode(.hierarchical).modifier(MenuPanelSecondary())
+        .frame(width: 20)
+      VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 6) {
+          Text(title).modifier(MenuPanelSecondary())
+          if edited {
+            Text("Edited").modifier(MenuPanelSecondary())
+              .padding(.horizontal, 5).padding(.vertical, 1)
+              .background(.quaternary, in: Capsule())
+          }
+        }
+        .font(.system(.caption, design: .default))
+        Text(value).font(.system(.body, design: .default, weight: .medium))
+          .lineLimit(1).truncationMode(.middle)
+      }
+      Spacer(minLength: 4)
+      Image(systemName: "chevron.up.chevron.down")
+        .font(.system(.caption2, design: .default, weight: .medium)).modifier(MenuPanelSecondary())
+    }
+    .padding(.horizontal, 12).padding(.vertical, 11)
+    .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+    .contentShape(Rectangle())
+    .modifier(MenuPanelHover())
+  }
+}
+
+private struct MenuPanelUtilityLabel: View {
+  let title: String
+  let symbol: String
+  var body: some View {
+    Label(title, systemImage: symbol).symbolRenderingMode(.hierarchical)
+      .font(.system(.caption, design: .default))
+      .padding(.horizontal, 8).frame(minHeight: 30)
+      .contentShape(Rectangle()).modifier(MenuPanelHover())
+  }
+}
+
+private struct ShortcutHint: View {
+  let value: String
+  init(_ value: String) { self.value = value }
+  var body: some View {
+    Text(value).font(.system(.caption, design: .default)).modifier(MenuPanelSecondary())
+      .accessibilityHidden(true)
+  }
+}
+
+private struct MenuPanelSecondary: ViewModifier {
+  @Environment(\.menuPanelAccessibility) private var accessibility
+  func body(content: Content) -> some View {
+    content.foregroundStyle(
+      Color(nsColor: .labelColor).opacity(accessibility?.increaseContrast == true ? 1 : 0.74)
+    )
+  }
+}
+
+/// Color-only feedback avoids moving targets. Native button focus rings remain enabled.
+private struct MenuPanelHover: ViewModifier {
+  var pressed = false
+  @State private var hovering = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.isEnabled) private var enabled
+  @Environment(\.menuPanelAccessibility) private var accessibilityOverride
+  func body(content: Content) -> some View {
+    content
+      .background {
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+          .fill(
+            Color.primary.opacity(enabled && (pressed || hovering) ? (pressed ? 0.12 : 0.06) : 0)
+          )
+          .padding(3)
+      }
+      .overlay {
+        if enabled && hovering
+          && (accessibilityOverride?.increaseContrast ?? (contrast == .increased))
+        {
+          RoundedRectangle(cornerRadius: 6).strokeBorder(.secondary, lineWidth: 1).padding(3)
+            .allowsHitTesting(false)
+        }
+      }
+      .onHover { hovering = $0 }
+      .animation(
+        (accessibilityOverride?.reduceMotion ?? reduceMotion) ? nil : .easeOut(duration: 0.10),
+        value: hovering)
+  }
+}
+
+private struct MenuPanelButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label.modifier(MenuPanelHover(pressed: configuration.isPressed))
   }
 }
