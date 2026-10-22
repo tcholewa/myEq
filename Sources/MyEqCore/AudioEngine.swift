@@ -38,6 +38,7 @@ public final class AudioEngine {
   private var route: OutputRoute?
   private var preset = EQPreset.flat
   private var applied: EQPreset?
+  private var bufferPolicyUIDs = Set<String>()
   private var enabled = false
   private var sleeping = false
   private var loginEligible: Bool?
@@ -89,6 +90,7 @@ public final class AudioEngine {
     queue.async { [weak self] in
       guard let self, !self.closing else { return }
       let toggled = self.enabled != enabled || self.preferredOutputUID != outputUID
+      if toggled { self.bufferPolicyUIDs.removeAll() }
       self.preferredOutputUID = outputUID
       if toggled || retry {
         self.blocked = false
@@ -276,7 +278,13 @@ public final class AudioEngine {
           preset.autoPreamp
           ? EQResponse.autoPreamp(preset.bands, sampleRate: current.rate) : preset.manualPreamp
         let newSession = VirtualOutputSession()
-        try newSession.start(route: current, preset: preset, preamp: snapshot.preamp)
+        let applyBuffers = !bufferPolicyUIDs.contains(current.uid)
+        defer {
+          if newSession.bufferPolicyAttempted { bufferPolicyUIDs.insert(current.uid) }
+        }
+        try newSession.start(route: current, preset: preset, preamp: snapshot.preamp, applyBufferPolicy: applyBuffers)
+        // Absorb our own HAL change so the next topology poll does not rebuild the session.
+        route = try OutputRoute.read(current.id)
         session = newSession
         startupRetry.healthy(at: ProcessInfo.processInfo.systemUptime)
         meterMonitor?.setDSP(newSession.dsp)

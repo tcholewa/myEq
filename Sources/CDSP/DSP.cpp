@@ -105,14 +105,15 @@ struct MEQDSP {
     void publishLevels(float left, float right, double minGain) {
         // One packed atomic gives both channels the same polling interval.
         auto old = peaks.load(std::memory_order_relaxed);
-        for (;;) {
+        for (unsigned attempt=0; attempt<4; ++attempt) {
             const auto previous = unpackPeaks(old);
             const auto next = packPeaks(std::max(left, previous[0]), std::max(right, previous[1]));
             if (peaks.compare_exchange_weak(old, next, std::memory_order_relaxed)) break;
         }
         const float attenuation = float(-20 * log10(std::max(minGain, 1e-20)));
         auto oldReduction = reduction.load(std::memory_order_relaxed);
-        while (oldReduction < attenuation && !reduction.compare_exchange_weak(oldReduction, attenuation, std::memory_order_relaxed)) {}
+        for (unsigned attempt=0; attempt<4 && oldReduction<attenuation; ++attempt)
+            if(reduction.compare_exchange_weak(oldReduction, attenuation, std::memory_order_relaxed)) break;
     }
     template<bool Metering, typename Source, typename Destination>
     void render(uint32_t n, Source source, Destination dest, uint64_t epoch) {

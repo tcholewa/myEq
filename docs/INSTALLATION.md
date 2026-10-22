@@ -52,7 +52,7 @@ The user reported successful playback after manually locking the screen on insta
 
 ### Drops during heavy CPU load
 
-Compilation or other heavy work can coincide with Core Audio overloads. Version 0.4.5 isolates heartbeat renewal from synchronous device discovery so a slow device query does not itself block the app's lease renewal. It retains the existing lease and render-progress checks; it cannot guarantee uninterrupted audio when the system misses real-time deadlines. This candidate still needs installed playback validation under the user's workload.
+Compilation or other heavy work can coincide with Core Audio overloads. Version 0.4.6 also separates active recovery-helper HAL queries from heartbeat/status handling. A single recovery-status RPC timeout no longer ends playback: the bridge allows up to two seconds of recovery-helper silence while app and render progress stay healthy. Confirmed peer loss still revokes immediately. On explicit enable/output selection it requests a supported 512-frame hardware minimum, preserves larger values, and tries to match the virtual buffer. These are device-wide settings, conditionally restored on session teardown; they may increase latency and affect other audio software. Automatic reconnections do not repeatedly enforce them. Startup diagnostics report actual values, not just requests. This candidate still needs installed playback validation under the user's workload and cannot guarantee uninterrupted audio when the system misses real-time deadlines.
 
 For a recurrence, note the time, workload and whether EQ recovered or needed Retry. Engine and transport diagnostics are available without recording audio:
 

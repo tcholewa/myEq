@@ -61,6 +61,10 @@ static void renderTests(double driftPPM, double sampleRate=48000, bool planar=fa
     assert(meq_output_callback(0,&ts,&input,&ts,buffers,&ts,r)==noErr);
     for(int i=0;i<256;i++){auto l=sample(left,i);assert(std::isfinite(l)&&fabs(l)<=.945);assert(sample(right,i)==0);energy+=l*l;}
   }
+  auto timing=meq_render_timing(r);
+  if(r->timingEnabled){assert(timing.callbacks==12000&&timing.maximumNS>0);
+    std::cout<<"render timing maxNS="<<timing.maximumNS<<" overHalf="<<timing.overHalfPeriod<<" overPeriod="<<timing.overPeriod<<"\n";
+  }else assert(timing.callbacks==0);
   auto health=meq_transport_health(r);
   std::cout<<"rate="<<sampleRate<<" planar="<<planar<<" swapped="<<swapped<<" drift="<<driftPPM<<"ppm buffer="<<health.bufferedFrames<<" ratio="<<health.correction<<" underruns="<<health.underruns<<" energy="<<energy<<"\n";
   assert(energy>1000);assert(health.underruns==0);assert(health.overruns==0);

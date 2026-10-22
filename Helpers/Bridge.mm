@@ -1,4 +1,5 @@
 #include "IPC.hpp"
+#include "Health.hpp"
 #import <SystemConfiguration/SystemConfiguration.h>
 
 using namespace meq;
@@ -24,11 +25,19 @@ bool paired(){return appPeer&&recoveryPeer&&foreground(appPeer)&&foreground(reco
   xpc_connection_get_euid(appPeer)==xpc_connection_get_euid(recoveryPeer)&&
   xpc_connection_get_asid(appPeer)==xpc_connection_get_asid(recoveryPeer);}
 void revoke(){
-  const auto old=generation;if(sessionActive){retiredGeneration=old;recoveryAvailable=false;}generation=0;sessionActive=false;
+  const auto old=generation;if(old){retiredGeneration=old;recoveryAvailable=false;}generation=0;sessionActive=false;
   if(memory){memory->s->active=0;memory->s->deadline=0;memory.reset();}
   if(old&&driverPeer)xpc_connection_send_message(driverPeer,sessionMessage("detach",old));
+  if(old&&recoveryPeer)xpc_connection_send_message(recoveryPeer,sessionMessage("retired",old));
 }
 void refresh(){if(driverPeer&&generation)xpc_connection_send_message(driverPeer,sessionMessage("refresh",generation));}
+void observeRender(){
+  if(!memory||!sessionActive)return;
+  auto rendered=memory->s->rendered.load(std::memory_order_relaxed);
+  if(rendered!=lastRender){lastRender=rendered;renderChanged=now();}
+}
+bool expired(){return now()>=healthDeadline(appBeat,recoveryBeat,renderChanged);}
+void renew(){if(memory)memory->s->deadline.store(healthDeadline(appBeat,recoveryBeat,renderChanged),std::memory_order_release);}
 void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object_t r){
   if(!r||!owner(c,role)){sendReply(c,r,"This connection no longer owns the session.");return;}
   auto op=string(m,"op");
@@ -71,17 +80,21 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
   if(op=="activate"&&role=="recovery"){
     if(!memory||now()-appBeat>2*NSEC_PER_SEC){sendReply(c,r,"Audio renderer is not ready.");return;}
     auto s=memory->s;if(!s->rendered.load()){sendReply(c,r,"Physical output has not started.");return;}
-    recoveryBeat=now();s->deadline=now()+2*NSEC_PER_SEC;s->active=1;sessionActive=true;
-    renderChanged=now();lastRender=s->rendered.load();refresh();sendReply(c,r);return;
+    recoveryBeat=now();sessionActive=true;
+    renderChanged=now();lastRender=s->rendered.load();renew();s->active.store(1,std::memory_order_release);refresh();sendReply(c,r);return;
   }
   if(op=="heartbeat"){
+    observeRender();
+    if(sessionActive&&expired()){
+      revoke();sendReply(c,r,"Audio session expired; recovery is settling.",true);return;
+    }
     if(role=="app")appBeat=now();else recoveryBeat=now();
     if(memory&&sessionActive){
-      auto rendered=memory->s->rendered.load();if(rendered!=lastRender){lastRender=rendered;renderChanged=now();}
-      if(now()-appBeat>1500*NSEC_PER_MSEC||now()-recoveryBeat>1500*NSEC_PER_MSEC||now()-renderChanged>1500*NSEC_PER_MSEC){
+      observeRender();
+      if(expired()){
         NSLog(@"myEq: bridge heartbeat expired app=%llu recovery=%llu render=%llu ms",(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);
         revoke();sendReply(c,r,"Audio session stopped; ordinary playback is being restored.",true);return;}
-      memory->s->deadline=now()+2*NSEC_PER_SEC;
+      renew();
     }
     sendReply(c,r);return;
   }
@@ -133,9 +146,10 @@ int main(){@autoreleasepool{
   auto timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
   dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,NSEC_PER_SEC/4,NSEC_PER_MSEC*25);
   dispatch_source_set_event_handler(timer,^{
+    observeRender();
     if(generation&&(!paired()||(!sessionActive&&now()-appBeat>4*NSEC_PER_SEC)||
-       (sessionActive&&(now()-appBeat>1500*NSEC_PER_MSEC||now()-recoveryBeat>1500*NSEC_PER_MSEC||now()-renderChanged>1500*NSEC_PER_MSEC)))){
+       (sessionActive&&(expired())))){
       NSLog(@"myEq: bridge revoked paired=%d app=%llu recovery=%llu render=%llu ms",paired(),(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);revoke();
-    }
+    }else if(sessionActive)renew();
   });dispatch_resume(timer);dispatch_main();
 }}

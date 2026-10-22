@@ -19,15 +19,19 @@ int main(){@autoreleasepool{
   auto check=[&](int expected,bool retry){assert(meq_heartbeat(&c,error,sizeof(error),&canRetry)==expected);assert(canRetry==retry);assert(responses.empty());};
   responses={status(),status()};check(1,false);
   responses={nil};check(0,true);
+  responses={status(),nil};check(1,false);
   responses={XPC_ERROR_CONNECTION_INTERRUPTED};check(0,true);
   responses={XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT};check(0,false);
   responses={meq::message("reply")};check(0,false);
-  auto malformed=status();xpc_dictionary_set_string(malformed,"reason","0");responses={malformed};check(0,false);
-  responses={status(1,true)};check(0,true);
-  responses={status(1,false)};check(0,false);
-  responses={status(2)};check(2,false);
-  responses={status(3)};check(3,false);
+  auto malformed=status();xpc_dictionary_set_string(malformed,"reason","0");responses={status(),malformed};check(0,false);
+  responses={status(),status(1,true)};check(0,true);
+  responses={status(),status(1,false)};check(0,false);
+  responses={status(),status(2)};check(2,false);
+  responses={status(),status(3)};check(3,false);
   responses={status(),XPC_ERROR_CONNECTION_INVALID};check(0,true);
+  // Activation refreshes the app lease after potentially slow HAL buffer setup.
+  responses={status(),status()};assert(meq_activate_route(&c,"usb",error,sizeof(error),&canRetry));assert(responses.empty());
+  responses={nil};assert(!meq_activate_route(&c,"usb",error,sizeof(error),&canRetry)&&canRetry&&responses.empty());
   c.state->failure=1;check(0,true);
   c.state->failure=2;check(0,false);
   std::cout<<"Heartbeat transient/permanent classification passed\n";

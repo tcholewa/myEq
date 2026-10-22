@@ -2,6 +2,7 @@
 #include "IPC.hpp"
 #import <AudioToolbox/AudioToolbox.h>
 #include <array>
+#include <cstdlib>
 
 using namespace meq;
 namespace {
@@ -17,13 +18,19 @@ struct MEQConnection {
   uint64_t volumeSequence=0,generation=0;
 };
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static_assert(std::atomic<double>::is_always_lock_free);
 struct MEQRenderer {
   std::shared_ptr<Mapping> memory;
   MEQDSP *dsp;
   AudioUnit converter=nullptr;
   MEQChannel left,right;
   double rate;
-  uint32_t outputFrames,target,fade=0;
+  uint32_t outputFrames,target,fade=0,fadeFrames=1;
+  Float32 appliedRate=1;
+  bool warming=false;
+  bool timingEnabled=false;
+  std::array<std::atomic<uint64_t>,8> timingBins{};
+  std::atomic<uint64_t> timingMaximum{0};
   std::atomic<uint32_t> sourceFrames{0};
   uint64_t discontinuity=0;
   bool primed=false,shortRead=false;
@@ -34,6 +41,25 @@ struct MEQRenderer {
   std::array<float,8192> leftSamples{},rightSamples{};
   ~MEQRenderer(){if(converter){AudioUnitUninitialize(converter);AudioComponentInstanceDispose(converter);}}
 };
+// Single callback writer; control readers only load. No CAS loop, allocation or logging.
+struct RenderTimer {
+  MEQRenderer *r;uint64_t begin;uint32_t frames;
+  explicit RenderTimer(MEQRenderer *renderer):r(renderer),begin(r->timingEnabled?now():0),frames(r->outputFrames){}
+  ~RenderTimer(){
+    if(!begin)return;
+    const auto elapsed=now()-begin;
+    const double fraction=double(elapsed)*r->rate/(1e9*frames);
+    unsigned bin=0;double upper=.0625;
+    while(bin<7&&fraction>upper){++bin;upper*=2;}
+    r->timingBins[bin].fetch_add(1,std::memory_order_relaxed);
+    if(elapsed>r->timingMaximum.load(std::memory_order_relaxed))r->timingMaximum.store(elapsed,std::memory_order_relaxed);
+  }
+};
+extern "C" MEQRenderTiming meq_render_timing(MEQRenderer *r){
+  MEQRenderTiming result{};if(!r||!r->timingEnabled)return result;
+  for(unsigned i=0;i<8;++i){auto count=r->timingBins[i].load(std::memory_order_relaxed);result.callbacks+=count;if(i>=4)result.overHalfPeriod+=count;if(i>=5)result.overPeriod+=count;}
+  result.maximumNS=r->timingMaximum.load(std::memory_order_relaxed);return result;
+}
 extern "C" int meq_read_settings(const char *path,uint8_t **bytes,size_t *length){
   *bytes=nullptr;*length=0;struct stat st{};if(lstat(path,&st)&&errno==ENOENT)return 1;
   NSData *data=readFile(path,4*1024*1024,getuid());if(!data)return -1;
@@ -80,8 +106,17 @@ extern "C" bool meq_open_transport(MEQConnection *c,double rate,const char *outp
   if(!mapping->map(xpc_dictionary_get_value(r,"memory"))||mapping->acceptedRate!=rate||mapping->acceptedGeneration!=xpc_dictionary_get_uint64(r,"generation")){copyError(out,size,"Invalid or incompatible driver transport.");return false;}
   c->memory=mapping;c->generation=mapping->acceptedGeneration;c->volumeSequence=0;return true;
 }
+extern "C" bool meq_prepare_buffers(MEQConnection *c,const char *uid,bool apply,char *out,size_t size,bool *canRetry){
+  *canRetry=false;
+  auto m=sessionMessage("prepareBuffers",c->generation);xpc_dictionary_set_string(m,"uid",uid);xpc_dictionary_set_bool(m,"apply",apply);
+  auto r=request(c->state->recovery,m);
+  if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
+}
 extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,size_t size,bool *canRetry){
   *canRetry=false;
+  // Buffer preparation may wait for HAL publication; start activation with a fresh app beat.
+  auto renewed=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
+  if(!succeeded(renewed)){*canRetry=retryable(renewed);copyError(out,size,error(renewed));return false;}
   auto m=sessionMessage("activate",c->generation);xpc_dictionary_set_string(m,"uid",uid);
   auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
@@ -91,13 +126,17 @@ extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRet
     *canRetry=c&&c->state->failure.load()==1;
     copyError(out,size,"Audio helper connection was lost. Retry to reconnect.");return 0;
   }
+  // Renew first: a slow recovery status RPC must not starve the app's own lease.
+  auto r=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
+  if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return 0;}
   auto status=request(c->state->recovery,sessionMessage("status",c->generation),0.5);
+  // Only absence of a reply is tolerated; the bridge independently enforces recovery freshness.
+  if(!status&&!c->state->failure.load())return 1;
   if(!succeeded(status)){*canRetry=retryable(status);copyError(out,size,error(status));return 0;}
   if(!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,"The recovery helper returned an invalid status.");return 0;}
   auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);
-  if(reason){*canRetry=reason==1&&retryable(status);copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
-  auto r=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
-  if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return 0;}return 1;
+  if(reason||!xpc_dictionary_get_bool(status,"active")){*canRetry=reason==1&&retryable(status);copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
+  return 1;
 }
 extern "C" void meq_close_transport(MEQConnection *c){
   if(!c||!c->generation)return;
@@ -117,7 +156,7 @@ extern "C" void meq_volume_state(MEQConnection *c,bool volumeSupported,bool mute
 }
 static OSStatus supply(void *context,AudioUnitRenderActionFlags *,const AudioTimeStamp *,UInt32,UInt32 frames,AudioBufferList *out){
   auto r=static_cast<MEQRenderer*>(context);if(frames>capacity||out->mNumberBuffers!=2)return kAudio_ParamError;
-  auto count=meq::read(r->memory->s,r->input.data(),frames);if(count<frames)r->shortRead=true;
+  auto count=r->warming?frames:meq::read(r->memory->s,r->input.data(),frames);if(count<frames)r->shortRead=true;
   for(UInt32 c=0;c<2;c++){
     if(!out->mBuffers[c].mData||out->mBuffers[c].mDataByteSize<frames*sizeof(float))return kAudio_ParamError;
     auto p=static_cast<float*>(out->mBuffers[c].mData);for(UInt32 i=0;i<frames;i++)p[i]=r->input[i*2+c];
@@ -125,7 +164,8 @@ static OSStatus supply(void *context,AudioUnitRenderActionFlags *,const AudioTim
 }
 extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double rate,uint32_t frames,uint32_t sourceFrames,MEQChannel left,MEQChannel right,char *out,size_t size){
   if(!c||!c->memory||!dsp||frames>4096||!frames||!sourceFrames||sourceFrames>4096){copyError(out,size,"Unsupported output buffer size.");return nullptr;}
-  auto r=std::make_unique<MEQRenderer>();r->memory=c->memory;r->dsp=dsp;r->rate=rate;r->left=left;r->right=right;r->outputFrames=frames;r->sourceFrames=sourceFrames;r->target=std::max(256u,2*std::max(frames,sourceFrames));
+  auto r=std::make_unique<MEQRenderer>();r->memory=c->memory;r->dsp=dsp;r->rate=rate;r->left=left;r->right=right;r->outputFrames=frames;r->sourceFrames=sourceFrames;r->target=std::max(256u,2*std::max(frames,sourceFrames));r->fadeFrames=uint32_t(ceil(rate*.005));
+  const char *timing=getenv("MYEQ_RENDER_TIMING");r->timingEnabled=timing&&strcmp(timing,"1")==0;
   AudioComponentDescription description{kAudioUnitType_FormatConverter,kAudioUnitSubType_Varispeed,kAudioUnitManufacturer_Apple,0,0};
   auto component=AudioComponentFindNext(nullptr,&description);
   OSStatus status=component?AudioComponentInstanceNew(component,&r->converter):kAudio_ParamError;
@@ -137,6 +177,15 @@ extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double 
   if(!status)status=AudioUnitSetProperty(r->converter,kAudioUnitProperty_SetRenderCallback,kAudioUnitScope_Input,0,&callback,sizeof(callback));
   if(!status)status=AudioUnitInitialize(r->converter);
   if(status){copyError(out,size,"Could not initialize clock-drift conversion (Core Audio "+std::to_string(status)+").");return nullptr;}
+  // Exercise lazy converter setup before HAL starts, without consuming transport samples.
+  r->warming=true;
+  struct {UInt32 count;AudioBuffer buffers[2];} warm{2,{{1,frames*4,r->leftSamples.data()},{1,frames*4,r->rightSamples.data()}}};
+  AudioTimeStamp timestamp{};timestamp.mFlags=kAudioTimeStampSampleTimeValid;
+  AudioUnitRenderActionFlags flags=0;
+  status=AudioUnitRender(r->converter,&flags,&timestamp,0,frames,reinterpret_cast<AudioBufferList*>(&warm));
+  if(!status)status=AudioUnitReset(r->converter,kAudioUnitScope_Global,0);
+  r->warming=false;
+  if(status){copyError(out,size,"Could not warm clock-drift conversion.");return nullptr;}
   return r.release();
 }
 extern "C" bool meq_renderer_set_source_frames(MEQRenderer *r,uint32_t frames){
@@ -150,6 +199,7 @@ extern "C" MEQTransportHealth meq_transport_health(MEQRenderer *r){
 }
 extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,const AudioBufferList*,const AudioTimeStamp*,AudioBufferList *out,const AudioTimeStamp *timestamp,void *context){
   auto r=static_cast<MEQRenderer*>(context);auto s=r->memory->s;
+  RenderTimer timing(r);
   s->rendered.fetch_add(1,std::memory_order_relaxed);
   for(UInt32 i=0;i<out->mNumberBuffers;i++)if(out->mBuffers[i].mData)memset(out->mBuffers[i].mData,0,out->mBuffers[i].mDataByteSize);
   auto count=[out](MEQChannel c)->uint32_t{
@@ -158,9 +208,10 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
   };
   const uint32_t frames=count(r->left);
   if(!frames||frames!=count(r->right)||frames>8192){s->invalidSamples.fetch_add(1,std::memory_order_relaxed);return noErr;}
+  timing.frames=frames;
   // Reserve two blocks of the larger clock domain, not just two hardware blocks.
   // A 512-frame producer cannot continuously feed a 128-frame device from 256 frames.
-  const auto target=std::max(256u,2*std::max(r->outputFrames,r->sourceFrames.load(std::memory_order_relaxed)));
+  const auto target=std::max(256u,2*std::max(frames,r->sourceFrames.load(std::memory_order_relaxed)));
   if(target!=r->target){
     if(target>r->target)r->primed=false;
     r->target=target;r->drift={};
@@ -170,20 +221,28 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
   bool ready=s->active.load(std::memory_order_acquire)&&now()<s->deadline.load(std::memory_order_relaxed);
   if(!ready){r->primed=false;discard(s);}
   if(ready&&!r->primed&&available(s)>=r->target){
-    AudioUnitReset(r->converter,kAudioUnitScope_Global,0);r->primed=true;r->fade=0;r->drift={};
+    if(AudioUnitReset(r->converter,kAudioUnitScope_Global,0)){
+      s->invalidSamples.fetch_add(1,std::memory_order_relaxed);return noErr;
+    }
+    r->primed=true;r->fade=0;r->drift={};
   }
   memset(r->stereo.data(),0,frames*2*sizeof(float));
   if(ready&&r->primed){
-    double ratio=r->drift.update(double(available(s))-r->target,r->rate,frames/r->rate);r->correction=ratio;
-    AudioUnitSetParameter(r->converter,kVarispeedParam_PlaybackRate,kAudioUnitScope_Global,0,Float32(ratio),0);
+    double ratio=r->drift.update(double(available(s))-r->target,r->rate,frames/r->rate);r->correction.store(ratio,std::memory_order_relaxed);
+    if(Float32(ratio)!=r->appliedRate){
+      if(AudioUnitSetParameter(r->converter,kVarispeedParam_PlaybackRate,kAudioUnitScope_Global,0,Float32(ratio),0)){
+        s->invalidSamples.fetch_add(1,std::memory_order_relaxed);r->primed=false;return noErr;
+      }
+      r->appliedRate=Float32(ratio);
+    }
     struct {UInt32 count;AudioBuffer buffers[2];} buffers{2,{{1,frames*4,r->leftSamples.data()},{1,frames*4,r->rightSamples.data()}}};
     AudioUnitRenderActionFlags flags=0;r->shortRead=false;
     OSStatus status=AudioUnitRender(r->converter,&flags,timestamp,0,frames,reinterpret_cast<AudioBufferList*>(&buffers));
     if(status||r->shortRead){
-      if(s->sourceRunning.load())s->underruns.fetch_add(1,std::memory_order_relaxed);
+      if(s->sourceRunning.load(std::memory_order_relaxed))s->underruns.fetch_add(1,std::memory_order_relaxed);
       r->primed=false;discard(s);
     }else for(uint32_t i=0;i<frames;i++){
-      const auto fadeFrames=uint32_t(ceil(r->rate*.005));
+      const auto fadeFrames=r->fadeFrames;
       if(r->fade<fadeFrames)++r->fade;
       float fade=float(r->fade)/fadeFrames;
       r->stereo[i*2]=r->leftSamples[i]*fade;r->stereo[i*2+1]=r->rightSamples[i]*fade;

@@ -32,6 +32,12 @@ int main(){@autoreleasepool{
   driverPeer=xpc_connection_create(nullptr,nullptr);
   xpc_connection_set_event_handler(driverPeer,^(xpc_object_t){});
   xpc_connection_resume(driverPeer);
+  const uint64_t base=10000000000;
+  assert(healthDeadline(base,base,base)==base+peerHealthNS);
+  for(uint64_t age:{600000000ull,1600000000ull,1999999999ull})
+    assert(base+age<healthDeadline(base+age,base,base+age));
+  assert(base+recoveryHealthNS==healthDeadline(base+recoveryHealthNS,base,base+recoveryHealthNS));
+  assert(base+peerHealthNS==healthDeadline(base,base+peerHealthNS,base+peerHealthNS));
   revoke();assert(detachMessages==0);
   generation=1;memory=std::make_shared<Mapping>();assert(memory->create(48000,1));
   auto prior=memory;

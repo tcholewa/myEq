@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 namespace meq {
-constexpr uint32_t protocol = 2, capacity = 16384, magic = 0x4d455131;
+constexpr uint32_t protocol = 3, capacity = 16384, magic = 0x4d455131;
 constexpr const char *deviceUID = "com.tc.myEq.output";
 constexpr const char *bridgeService = "com.tc.myEq.bridge";
 constexpr const char *recoveryService = "com.tc.myEq.recovery";

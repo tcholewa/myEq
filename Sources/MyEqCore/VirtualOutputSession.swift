@@ -8,6 +8,7 @@ import OSLog
 /// All lifecycle calls run on the engine's control queue. The IOProc is C++ only.
 final class VirtualOutputSession {
   let dsp = meq_create()!
+  private(set) var bufferPolicyAttempted = false
   private var connection: OpaquePointer?
   private var renderer: OpaquePointer?
   private var io: AudioDeviceIOProcID?
@@ -17,6 +18,7 @@ final class VirtualOutputSession {
   private var activity: NSObjectProtocol?
   private var sessionHeartbeat: SessionHeartbeat?
   private let logger = Logger(subsystem: "com.tc.myEq", category: "transport")
+  private var timingDiagnosticTime: TimeInterval = 0
   private var diagnosticTime: TimeInterval = 0
   private var reportedUnderruns: UInt64 = 0
   private var reportedOverruns: UInt64 = 0
@@ -42,7 +44,7 @@ final class VirtualOutputSession {
       throw AudioFailure(message: String(cString: error), retryableConnection: retryable)
     }
   }
-  func start(route: OutputRoute, preset: EQPreset, preamp: Double) throws {
+  func start(route: OutputRoute, preset: EQPreset, preamp: Double, applyBufferPolicy: Bool = true) throws {
     do {
       activity = ProcessInfo.processInfo.beginActivity(
         options: .userInitiatedAllowingIdleSystemSleep, reason: "System audio equalization")
@@ -55,6 +57,8 @@ final class VirtualOutputSession {
         return connection != nil
       }
       try checkedStartup { meq_open_transport(connection, route.rate, route.name, $0, $1, $2) }
+      bufferPolicyAttempted = applyBufferPolicy
+      try checkedStartup { meq_prepare_buffers(connection, route.uid, applyBufferPolicy, $0, $1, $2) }
       device = route.id
       let preferred =
         (try? HAL.ids(
@@ -83,7 +87,7 @@ final class VirtualOutputSession {
       }
       sourceDevice = source
       let sourceFrames = try HAL.scalar(source, kAudioDevicePropertyBufferFrameSize, UInt32(0))
-      logger.notice("Audio buffers source=\(sourceFrames) output=\(frames) rate=\(route.rate)")
+      logger.notice("Audio buffers source=\(sourceFrames) output=\(frames) rate=\(route.rate) sourceMs=\(Double(sourceFrames) * 1000 / route.rate) outputMs=\(Double(frames) * 1000 / route.rate) target=\(max(256, 2 * max(frames, sourceFrames)))")
       try checked {
         renderer = meq_renderer_create(
           connection, dsp, route.rate, frames, sourceFrames,
@@ -134,6 +138,13 @@ final class VirtualOutputSession {
     syncVolume()
     let health = meq_transport_health(renderer)
     let time = ProcessInfo.processInfo.systemUptime
+    if time - timingDiagnosticTime >= 5 {
+      timingDiagnosticTime = time
+      let timing = meq_render_timing(renderer)
+      if timing.callbacks > 0 {
+        logger.notice("Render timing callbacks=\(timing.callbacks) maxNS=\(timing.maximumNS) overHalfPeriod=\(timing.overHalfPeriod) overPeriod=\(timing.overPeriod)")
+      }
+    }
     if time - diagnosticTime >= 5,
       health.underruns != reportedUnderruns || health.overruns != reportedOverruns
         || health.discontinuities != reportedDiscontinuities

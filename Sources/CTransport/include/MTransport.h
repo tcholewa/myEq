@@ -16,6 +16,9 @@ typedef struct {
   double correction;
   bool connected;
 } MEQTransportHealth;
+typedef struct {uint64_t callbacks, maximumNS, overHalfPeriod, overPeriod;} MEQRenderTiming;
+// Opt-in MYEQ_RENDER_TIMING=1, configured before renderer creation; control-reader only.
+MEQRenderTiming meq_render_timing(MEQRenderer * _Nullable);
 // Bounded, descriptor-validated persistence. Caller frees successful read buffers.
 int meq_read_settings(const char * _Nonnull path, uint8_t * _Nullable * _Nonnull bytes, size_t * _Nonnull length);
 bool meq_write_settings(const char * _Nonnull path, const uint8_t * _Nonnull bytes, size_t length);
@@ -23,6 +26,7 @@ bool meq_installation_id(char * _Nonnull value, size_t capacity);
 // Control-thread calls only. Requests have bounded deadlines, never audio-thread IPC.
 MEQConnection * _Nullable meq_connect(char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 bool meq_open_transport(MEQConnection * _Null_unspecified, double rate, const char * _Nonnull outputName, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
+bool meq_prepare_buffers(MEQConnection * _Null_unspecified, const char * _Nonnull outputUID, bool apply, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 bool meq_activate_route(MEQConnection * _Null_unspecified, const char * _Nonnull outputUID, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 // Returns 1: healthy, 0: failure, 2: manual bypass, 3: destination disconnected.
 int meq_heartbeat(MEQConnection * _Null_unspecified, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
