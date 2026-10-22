@@ -171,6 +171,17 @@ void replaceFrom(int stage,const Item &item){
   require(renameatx_np(stage,item.name,dest.value,name.c_str(),exists?RENAME_SWAP:RENAME_EXCL)==0,"Cannot atomically replace installed object.");
   if(exists){struct stat moved{};require(fstatat(stage,item.name,&moved,AT_SYMLINK_NOFOLLOW)==0&&moved.st_dev==before.st_dev&&moved.st_ino==before.st_ino,"Concurrent installation change; retained recovery stage.");}
 }
+bool audioReloadRequired(){
+  auto current=validate();
+  FD support(directory(path(supportPath)));inspectTree(support.value,"myEqMaintenance");
+  matches(path("/Library/Application Support/myEq/myEqMaintenance"),current[@"maintenance"],"com.tc.myEq.maintenance");
+  const auto backup=path(supportPath)+"/previous.noindex";
+  struct stat st{};
+  if(lstat(backup.c_str(),&st)!=0){require(errno==ENOENT,"Cannot inspect previous installation.");return true;}
+  // Only a fully validated, protected snapshot can justify skipping a reload.
+  auto previous=validate(backup,true);
+  return ![current[@"driver"] isEqual:previous[@"driver"]] || ![current[@"bridge"] isEqual:previous[@"bridge"]];
+}
 void postflight(){
   auto trust=validate();FD support(directory(path(supportPath)));
   auto maintenance=path("/Library/Application Support/myEq/myEqMaintenance");inspectTree(support.value,"myEqMaintenance");matches(maintenance,trust[@"maintenance"],"com.tc.myEq.maintenance");
@@ -223,6 +234,7 @@ int main(int argc,const char **argv){@autoreleasepool{try{
   require(getuid()==0&&geteuid()==0&&argc==2,"Run the maintenance utility as root with one operation.");const char *operation=argv[1];
 #endif
   if(!strcmp(operation,"prepare"))prepare();else if(!strcmp(operation,"verify"))postflight();
+  else if(!strcmp(operation,"audio-reload-policy"))std::cout<<(audioReloadRequired()?"reload":"keep")<<"\n";
   else if(!strcmp(operation,"rollback"))rollback();else if(!strcmp(operation,"uninstall"))uninstall();
   else throw std::runtime_error("Unknown maintenance operation.");
   return 0;

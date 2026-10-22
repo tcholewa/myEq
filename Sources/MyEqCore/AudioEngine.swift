@@ -15,8 +15,8 @@ public struct EngineSnapshot: Equatable {
   public var outputs: [AudioOutput] = []
   public var selectedOutputUID: String?
   public var driverStatus: DriverStatus = .missing
-  public var state: AudioEngineState = .bypassed
-  public var outputName = "System output"
+  public var state: AudioEngineState = .starting
+  public var outputName = "Connecting to audio…"
   public var sampleRate: Double = 48000
   public var preamp: Double = 0
   public init() {}

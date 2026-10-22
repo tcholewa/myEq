@@ -143,7 +143,10 @@ struct OutputSelector: View {
     PopupMenuButton {
       let menu = ActionMenu()
       if model.engineStatus.outputs.isEmpty {
-        menu.choice("No output connected", enabled: false) {}
+        menu.choice(
+          model.engineStatus.state == .starting ? "Connecting to audio…" : "No output connected",
+          enabled: false
+        ) {}
       }
       for output in model.engineStatus.outputs {
         menu.choice(output.name, selected: output.id == model.engineStatus.selectedOutputUID) {

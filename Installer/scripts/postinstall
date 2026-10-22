@@ -9,8 +9,13 @@ fi
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
 # Validate all components, their trust relationships and filesystem objects before launch.
 "$script_dir/myEqMaintenance" verify
+reload_policy=$("$script_dir/myEqMaintenance" audio-reload-policy)
+case "$reload_policy" in reload|keep) ;; *) echo 'Invalid audio reload policy.' >&2; exit 1 ;; esac
 /bin/launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
-if /usr/bin/pgrep -x coreaudiod >/dev/null; then
-  /usr/bin/killall -TERM coreaudiod
+if [ "$reload_policy" = reload ]; then
+  if /usr/bin/pgrep -x coreaudiod >/dev/null; then /usr/bin/killall -TERM coreaudiod; fi
+  echo 'Core Audio was reloaded because its driver or bridge changed. Reopen playback apps to reconnect.'
+else
+  echo 'Audio driver and bridge are unchanged; Core Audio was not restarted.'
 fi
-echo 'myEq installed. Core Audio was reloaded; no Mac restart is required. Open /Applications/myEq.app and allow its background helper if prompted. Quit and reopen playback apps, including Music, to reconnect them to Core Audio.'
+echo 'myEq installed. Open /Applications/myEq.app and allow its background helper if prompted.'

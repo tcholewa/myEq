@@ -2,6 +2,7 @@
 """Exercise maintenance code in an unprivileged fixture root, never /Applications or launchd."""
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -40,6 +41,14 @@ def run(root, op, success):
         raise AssertionError((op, result.returncode, result.stderr))
     if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
         raise AssertionError(result.stderr)
+    return result.stdout.strip()
+
+def resign_and_update(bundle, manifest, role):
+    subprocess.run(['codesign', '--force', '--sign', '-', str(bundle)], check=True, capture_output=True)
+    detail = subprocess.run(['codesign', '-d', '--verbose=4', str(bundle)], check=True, capture_output=True, text=True).stderr
+    trust = plistlib.loads(manifest.read_bytes())
+    trust[role] = re.search(r'^CDHash=([0-9a-f]{40})$', detail, re.M).group(1)
+    manifest.write_bytes(plistlib.dumps(trust))
 
 with tempfile.TemporaryDirectory(prefix='myeq-installer-test-', dir='/private/tmp') as tmp:
     base = Path(tmp)
@@ -73,10 +82,28 @@ with tempfile.TemporaryDirectory(prefix='myeq-installer-test-', dir='/private/tm
         run(root, 'verify', case == 'valid')
         if case != 'valid':
             run(root, 'prepare', False)
+            run(root, 'audio-reload-policy', False)
         assert victim.read_bytes() == b'unrelated fixture data'
         if case == 'valid':
+            assert run(root, 'audio-reload-policy', True) == 'reload'  # Fresh installation.
             run(root, 'prepare', True)
-            assert (support / 'previous.noindex/myEq.app').is_dir()
+            backup = support / 'previous.noindex'
+            assert (backup / 'myEq.app').is_dir()
+            assert run(root, 'audio-reload-policy', True) == 'keep'
+            # App-only updates must preserve the running audio server.
+            app = root / 'Applications/myEq.app'
+            (app / 'Contents/Resources/reload-fixture.txt').write_text('new app')
+            resign_and_update(app, support / 'trust.plist', 'app')
+            assert run(root, 'audio-reload-policy', True) == 'keep'
+            # A linked snapshot cannot justify skipping the reload.
+            saved = support / 'saved.noindex'; backup.rename(saved); backup.symlink_to(saved)
+            run(root, 'audio-reload-policy', False)
+            backup.unlink(); saved.rename(backup)
+            # A different, valid previous driver requires a reload.
+            old_driver = backup / 'myEq.driver'
+            (old_driver / 'Contents/Resources/reload-fixture.txt').write_text('older driver')
+            resign_and_update(old_driver, backup / 'trust.plist', 'driver')
+            assert run(root, 'audio-reload-policy', True) == 'reload'
             run(root, 'rollback', True)
             run(root, 'uninstall', True)
             assert not (root / 'Applications/myEq.app').exists()
