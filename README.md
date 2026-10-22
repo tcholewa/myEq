@@ -1,6 +1,8 @@
 # myEq
 
-A native macOS menu bar equalizer for the mixed system stereo output. Eight parametric bands, presets, automatic preamp, a response graph, and stereo-linked peak protection. Apple Silicon, macOS 27+, Xcode 27+.
+A native macOS menu bar equalizer for your system's mixed stereo output. Shape your sound with eight parametric bands, save presets, and keep playback running when the editor is closed.
+
+**Apple Silicon · macOS 27+ · MIT licensed**
 
 ## Screenshots
 
@@ -12,32 +14,44 @@ A native macOS menu bar equalizer for the mixed system stereo output. Eight para
 
 <img src="Screenshot%20MenuBar.png" width="354" alt="myEq menu bar panel with output selection, preset controls, and EQ bypass">
 
+## Features
+
+- Eight bands with bell, low/high shelf, and low/high cut filters; edit frequency, gain, and width numerically, with faders, or on the response graph.
+- Saved presets, automatic preamp, and stereo-linked sample-peak protection.
+- Independent L/R output meters with slowly falling peak markers and matching dBFS readings, updated at 30 Hz.
+- Menu bar access to output selection, presets, bypass, launch at login, and the editor.
+- Visual processing pauses when the editor is closed, hidden, minimized, or fully covered; audio processing continues.
+- Local audio processing through an output-only virtual device and shared memory. No audio recording, microphone capture, or network audio transport.
+
+myEq processes the default system mix. It does not provide per-app controls; applications explicitly routed to another device remain outside that mix.
+
+## Requirements and project status
+
+| Requirement | Current support |
+| --- | --- |
+| Mac | Apple Silicon (arm64) |
+| macOS | 27 or later |
+| Build tools | Full Xcode 27 or later, with its command-line tools selected; Python 3 |
+| Installation | Administrator access for the virtual output driver and background helpers |
+| Dependencies | Apple system frameworks; no external package dependencies |
+
+This is an early source release. The build produces an **ad-hoc-signed, non-notarized installer** for local development; it is not a Developer ID distribution. Automated checks and some live checks have passed, but the full device, recovery, performance, and latency matrix is still incomplete. See [verification results and remaining hardware checks](docs/VERIFICATION.md).
+
 ## Build and install
+
+Clone or download this repository, open a terminal in its root, and run:
 
 ```sh
 bash scripts/build-installer.sh
+python3 scripts/verify-installer.py
 open dist/myEq.pkg
 ```
 
-Quit myEq and audio playback apps, including Music, before installation. The local installer uses administrator authorization to install `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, and a small unprivileged bridge service. Its welcome screen explains that it **reloads Core Audio at the end of installation**, briefly interrupting sound in all apps, including calls and recordings. Install when that interruption is acceptable. This is needed after upgrades too: replacing the driver bundle can unload it even when the executable is unchanged. No full Mac restart is required. Reopen playback apps afterward so they reconnect to the audio service. If Music starts skipping tracks after an update, quit it completely with ⌘Q and reopen it before testing again.
+**Quit myEq and audio playback apps before installing.** The installer reloads Core Audio, briefly interrupting all sound, including calls and recordings. No full Mac restart is required. Reopen playback apps after installation so they reconnect to the audio service.
 
-For an older installer, or if the driver still needs loading, reload Core Audio manually:
+Open `/Applications/myEq.app` and allow its background helper in **System Settings → General → Login Items & Extensions** if prompted. Select your physical output in myEq, then enable EQ.
 
-```sh
-sudo killall -TERM coreaudiod
-```
-
-macOS relaunches the service. A full macOS restart is an alternative. Then open the installed app and allow its recovery helper in **System Settings → General → Login Items & Extensions** if requested. The build is locally ad-hoc signed; it is not notarized for distribution.
-
-The app, bridge, and driver must come from the same package. Rebuild and reinstall after updates; the installer refreshes the trusted signing hashes. Do not replace just the app with a development build. `bash scripts/build.sh` builds app/driver artifacts without making a package or installing anything. Its app output is `build/artifacts.noindex/myEq.app`; Xcode products and temporary staging also live under `artifacts.noindex` to exclude them from Spotlight. Packaging removes temporary copies on success or failure, and `dist` contains only the current installer. The build scripts never restart Core Audio or reboot.
-
-Launch `/Applications/myEq.app` directly after quitting other copies. Xcode's intermediate app does not contain the packaged helper. Development copies show the installed app's location and leave audio/helper registration disabled; `--preview` remains available for editor work. Quit a development preview before rebuilding it; the installed app can remain open.
-
-This version replaces the process-tap backend with a virtual output and shared memory. It has no recording-input stream, process-tap calls, microphone capture, or network transport. Audio is never saved to disk. Absence of macOS capture prompts/indicators is a hardware acceptance check; see [verification status](docs/VERIFICATION.md).
-
-## Design
-
-Version 0.3.0 introduces a graphite studio interface with warm ivory type, gold controls, and color reserved for the eight bands. The editor groups the response and preamp together, adds filter-shape glyphs and width dials, and keeps stereo levels in a fixed footer. A compact layout fits the normal controls at 1040 × 740; additional notices can scroll. The app icon and menu bar symbol share the same three-fader mark. Opening or reopening the editor starts with neutral keyboard focus and no band selected; click a field or press Tab to begin editing.
+Always install the app, driver, and helpers from the same package. Build artifacts are under `build/artifacts.noindex`; `dist/myEq.pkg` is the installer. For setup details, troubleshooting, rollback, and removal, see [installation guide](docs/INSTALLATION.md).
 
 ## Use
 
@@ -50,47 +64,21 @@ Volume and mute follow the physical device where supported. Fixed-volume hardwar
 
 The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu computes a small static response; it does not enable live metering. When both surfaces are hidden, all visual calculations stop.
 
-Built-in/wired, USB/HDMI, and Bluetooth stereo routes are supported by the implementation. Bluetooth microphone use suspends EQ until stereo playback returns. AirPlay, other virtual devices, aggregates/multi-output, and surround are excluded. The virtual device follows the physical nominal sample rate from 32–192 kHz; unsupported formats remain bypassed. Applications explicitly routed to another device are outside the default mix.
+## Output compatibility
 
-## Recovery and removal
+Built-in/wired, USB/HDMI, and Bluetooth stereo routes are supported by the implementation. Bluetooth microphone use suspends EQ until stereo playback returns. AirPlay, other virtual devices, aggregates/multi-output, and surround are excluded. The virtual device follows the physical nominal sample rate from 32–192 kHz; unsupported formats remain bypassed. Implementation support is not a claim that every device has been tested; hardware coverage is listed in [verification](docs/VERIFICATION.md).
 
-Temporary helper/driver startup failures reconnect automatically with up to four delayed retries. EQ remains in **Starting** while those connections settle; disabling EQ cancels the pending retries. Permanent setup errors and exhausted retries still show the specific error and a Retry action.
+## Development and contributing
 
-An independent per-user recovery agent owns output routing. It records routing metadata before changes and restores ordinary playback after quit, bypass, helper disconnect, or a stalled app. A bounded driver lease makes the virtual device unavailable if its helpers disappear. Recovery only changes defaults still pointing at myEq; it preserves subsequent manual selections. Recovery timing and crash behavior still need the live acceptance checks documented below.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, checks, and issue reporting. Open `myEq.xcodeproj` for editor work. The packaged app's `--preview` mode opens the editor without enabling audio or saving settings; `--diagnose` prints output-device information.
 
-After quitting myEq:
+- [Installation and troubleshooting](docs/INSTALLATION.md): setup, driver loading, recovery, and removal.
+- [Architecture](docs/ARCHITECTURE.md): signal path, driver, transport, DSP, and recovery.
+- [Verification](docs/VERIFICATION.md): automated results, live evidence, and outstanding checks.
+- [Security reporting](SECURITY.md): how to report a vulnerability privately.
+- [Maintainer release guide](docs/RELEASING.md): GitHub setup and release preparation.
 
-```sh
-sudo bash scripts/uninstall.sh
-# Or restore the previous complete installed package:
-sudo bash scripts/rollback.sh
-```
-
-After either operation, reload Core Audio with the command above, or restart macOS, to unload/reload the driver. Personal presets under `~/Library/Application Support/myEq` are preserved. Settings version 1 migrates to version 2 without losing presets or the enable preference; version 2 adds the preferred physical output UID.
-
-## Development and verification
-
-```sh
-swift test
-bash scripts/test-native.sh
-bash scripts/test-native.sh asan
-xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
-bash scripts/render-design.sh
-# After building the installer:
-python3 scripts/verify-installer.py
-```
-
-The native checks exercise ring concurrency and wraparound, real Apple AUVarispeed rendering, clock drift, output-only driver properties, and recovery with mocked hardware. Audio Unit tests need access to the system Audio Unit service and may not run inside a restricted sandbox.
-
-After installation, `bash scripts/test-native.sh installed-ipc` checks the real bridge's identity and rejection of wrong-version/unauthorized clients. It sends only handshake messages and does not change audio routing.
-
-With EQ already enabled, `bash scripts/test-native.sh installed-playback` starts fresh AudioQueue clients at 44.1, 48, and 96 kHz. It enqueues silence and checks callbacks, advancing sample time, and the preserved default output. It neither enables EQ nor changes routing, and exits with status 78 when myEq is not the active default output. This distinguishes driver startup failures from a playback app retaining a stale connection after a Core Audio reload.
-
-`render-design.sh` compiles a separate offscreen preview utility against the app views and core library. It writes Retina PNGs for the editor, compact editor, and menu states to `build/artifacts.noindex/design-preview`, and asserts that hidden surfaces do not recalculate their curves. It uses synthetic levels and settings, never captures the screen, and does not enable audio or save preferences. It currently uses Xcode 27’s SwiftPM product layout.
-
-Open `myEq.xcodeproj` for editor development. `--preview` uses Botaniq1 without enabling audio or saving settings. `--diagnose` prints output-device information. See [architecture](docs/ARCHITECTURE.md) and [verification results and outstanding hardware checks](docs/VERIFICATION.md).
-
-The C++ DSP retains eight double-precision biquads, 20 ms parameter transitions, and a 1 ms lookahead limiter at −0.5 dBFS. This is a sample-peak limiter, not oversampled true-peak limiting. Hardware buffering, the shared ring, and clock conversion add latency beyond that 1 ms; the under-20-ms wired target must be measured end to end.
+Peak protection is a stereo-linked sample-peak limiter with 1 ms lookahead, not oversampled true-peak limiting. Hardware buffers, transport, and clock conversion add latency; the under-20-ms wired target still needs end-to-end measurement.
 
 ## License and acknowledgments
 

@@ -203,6 +203,16 @@ On 2026-10-22, the project adopted the MIT License with copyright attributed to 
 
 The Release installer rebuild passes. Expanded-package verification confirms that `LICENSE` and `THIRD_PARTY_NOTICES.md` in the app's resources match the repository files byte for byte, alongside the existing signature, XPC identity, recovery constraint, version, icon, and installer-script checks. Shell/Python syntax, local documentation links, and whitespace checks pass. The source change to DSP is a comment only; no audio or UI behavior changed, and no hardware tests or installation were performed for this licensing update.
 
+## Public repository preparation
+
+On 2026-10-22, the README was organized for new users, retaining both screenshots and the MIT/DSP notices. Installation and troubleshooting details moved into `INSTALLATION.md`; contribution, security-reporting, and release guides were added alongside GitHub issue forms, a pull-request template, and a build/test workflow. Ignore rules now cover local tool caches, environment files, signing material, and packaged products.
+
+A read-only review of the 31 existing commits (252 unique file blobs) found no matches for the checked private-key, common service-token, credential-URL, or personal absolute-path patterns, and no credential or packaged-binary paths in history. This was a limited pattern/provenance review, not a guarantee that every possible secret format was detected. Commit history contains the author's name and personal email; history was preserved. Screenshots were inspected, including their text metadata, and retained as supplied.
+
+Local verification passes on macOS 27.0.1 with Xcode 27.1: all **30 Swift tests**, the native suite normally and with AddressSanitizer, Swift formatting, Release installer build, expanded-package verification, shell/Python/plist/XML syntax, and local documentation-file links. The repository checker was also exercised against broken/escaping links and a missing license. GitHub YAML parses, issue field IDs are unique, and the workflow has read-only contents permission and a commit-pinned checkout action.
+
+The workflow uses GitHub's hosted `xcode-27` Apple Silicon image and selects Xcode 27.1. Its test/build commands were verified locally; the first hosted execution remains pending. No GitHub repository was created, remote added, history rewritten, package installed, or release published during this preparation. Enabling private vulnerability reporting and repository rules remains part of GitHub setup, documented in `RELEASING.md`.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:

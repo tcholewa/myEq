@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem with myEq.
+body:
+  - type: markdown
+    attributes:
+      value: For vulnerabilities, follow SECURITY.md instead of sharing details here. Remove personal information from logs and screenshots.
+  - type: input
+    id: version
+    attributes:
+      label: myEq version or commit
+      placeholder: 0.3.3 (build 6), or a source commit
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: macOS version and Mac model
+      placeholder: macOS 27.0.1, Apple Silicon Mac model
+    validations:
+      required: true
+  - type: input
+    id: output
+    attributes:
+      label: Audio output and sample rate
+      description: Device model, connection type (built-in, USB, Bluetooth, HDMI), and sample rate if known.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include whether this followed installation, an output change, bypass, sleep/wake, or opening/closing the editor.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: For playback problems, does audio work with EQ bypassed? Does fully quitting and reopening the playback app help?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant logs or screenshots
+      description: Optional, minimal excerpts only. For CPU reports, include visible/hidden state, sample rate, and measurement method.

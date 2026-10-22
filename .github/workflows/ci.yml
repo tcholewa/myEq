@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          python3 --version
+      - name: Check repository files
+        run: |
+          python3 scripts/check-repository.py
+          git show --format= --check HEAD
+      - name: Swift tests
+        run: swift test
+      - name: Native tests
+        run: bash scripts/test-native.sh
+      - name: Native tests with AddressSanitizer
+        run: bash scripts/test-native.sh asan
+      - name: Swift formatting
+        run: xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
+      - name: Build installer
+        run: bash scripts/build-installer.sh
+      - name: Verify installer
+        run: python3 scripts/verify-installer.py
