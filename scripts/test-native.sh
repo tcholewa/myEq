@@ -16,6 +16,7 @@ if [ "${1:-}" = "installed-ipc" ]; then
 fi
 if [ "${1:-}" = "tsan" ]; then
   common+=(-O1 -g -fsanitize=thread)
+  xcrun clang++ "${common[@]}" Tests/Native/SpectrumTests.mm -framework Foundation -o build/native-tests/spectrum-tsan
   xcrun clang++ "${common[@]}" Tests/Native/ConsoleUserTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/console-user-tsan
   xcrun clang++ "${common[@]}" Tests/Native/HeartbeatDelayTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/heartbeat-delay-tsan
   xcrun clang++ "${common[@]}" Tests/Native/SecurityTests.mm -framework Foundation -framework SystemConfiguration -framework Security -o build/native-tests/security-tsan
@@ -24,9 +25,11 @@ if [ "${1:-}" = "tsan" ]; then
   build/native-tests/heartbeat-delay-tsan
   build/native-tests/security-tsan
   build/native-tests/recovery-tsan
+  build/native-tests/spectrum-tsan
   exit
 fi
 if [ "${1:-}" = "asan" ]; then common+=(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all); fi
+xcrun clang++ "${common[@]}" Tests/Native/SpectrumTests.mm -framework Foundation -o build/native-tests/spectrum
 xcrun clang++ "${common[@]}" Tests/Native/TransportTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/transport
 xcrun clang++ "${common[@]}" Tests/Native/DriverTests.mm -framework Foundation -framework CoreAudio -o build/native-tests/driver
 xcrun clang++ "${common[@]}" Tests/Native/RecoveryTests.mm -framework Foundation -framework CoreAudio -framework AppKit -framework SystemConfiguration -o build/native-tests/recovery
@@ -43,3 +46,4 @@ build/native-tests/bridge-lifecycle
 build/native-tests/driver
 build/native-tests/recovery
 build/native-tests/transport
+build/native-tests/spectrum

@@ -102,6 +102,12 @@ struct ResponseGraph: View {
           }
         }
       }
+      .background(
+        InputSpectrumView(
+          model: model.inputSpectrum,
+          visible: model.isEditorVisible && model.spectrumEnabled
+        ).allowsHitTesting(false)
+      )
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 0).onChanged { gesture in

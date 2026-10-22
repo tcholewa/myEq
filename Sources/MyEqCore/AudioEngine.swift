@@ -28,6 +28,8 @@ public final class AudioEngine {
   public var onUpdate: ((EngineSnapshot) -> Void)?
   public var onBypass: (() -> Void)?
   public var onSelectedOutput: ((String) -> Void)?
+  public var onSpectrum: ((SpectrumFrame?) -> Void)?
+  private let spectrumMonitor = InputSpectrumMonitor()
   public var onMeter: ((OutputLevels) -> Void)?
   private let logger = Logger(subsystem: "com.tc.myEq", category: "engine")
   private let queue = DispatchQueue(label: "com.tc.myEq.audio-control", qos: .userInitiated)
@@ -51,6 +53,7 @@ public final class AudioEngine {
   private var listeners: [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
 
   public init() {
+    spectrumMonitor.deliver = { [weak self] in self?.onSpectrum?($0) }
     queue.async { [weak self] in self?.beginMonitoring() }
   }
   private func beginMonitoring() {
@@ -108,6 +111,9 @@ public final class AudioEngine {
       self.meterMonitor?.setVisible(visible)
     }
   }
+  public func setSpectrumVisible(_ visible: Bool, reducedMotion: Bool = false) {
+    spectrumMonitor.configure(visible: visible, reducedMotion: reducedMotion)
+  }
   public func refreshLoginSession() {
     queue.async { [weak self] in self?.tick() }
   }
@@ -123,6 +129,7 @@ public final class AudioEngine {
   }
   public func shutdown(completion: @escaping () -> Void) {
     queue.async {
+      self.spectrumMonitor.shutdown()
       self.closing = true
       self.timer?.cancel()
       self.timer = nil
@@ -149,6 +156,7 @@ public final class AudioEngine {
   }
   private func stop() {
     startupRetry.interrupted()
+    spectrumMonitor.setDSP(nil)
     meterMonitor?.setDSP(nil)
     session?.stop()
     session = nil
@@ -288,6 +296,7 @@ public final class AudioEngine {
         route = try OutputRoute.read(current.id)
         session = newSession
         startupRetry.healthy(at: ProcessInfo.processInfo.systemUptime)
+        spectrumMonitor.setDSP(newSession.dsp)
         meterMonitor?.setDSP(newSession.dsp)
         applied = preset
       } else {

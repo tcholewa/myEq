@@ -2,6 +2,7 @@
 // as published by W3C (2021). See THIRD_PARTY_NOTICES.md for attribution,
 // adaptation details, and the W3C Software and Document License.
 #include "CDSP.h"
+#include "SpectrumCapture.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -84,6 +85,7 @@ Config config(const MEQBand *bands,int n,double preamp,double rate) {
 }
 
 struct MEQDSP {
+    std::shared_ptr<myeq::SpectrumCapture> spectrum;
     double rate=48000,release=0,limiterGain=1;
     Bank current,old;
     std::array<Config,queueSize> queue;
@@ -196,6 +198,7 @@ MEQDSP *meq_create(){return new MEQDSP;}
 void meq_destroy(MEQDSP *d){delete d;}
 bool meq_prepare(MEQDSP *d,double fs,const MEQBand *b,int n,double gain) {
     if(!d || !std::isfinite(fs)||fs<32000||fs>192000||!valid(b,n,gain))return false;
+    d->spectrum=std::make_shared<myeq::SpectrumCapture>(fs);
     d->rate=fs;d->current=Bank{};d->current.config=config(b,n,gain,fs);d->old=d->current;
     d->read=0;d->write=0;d->fadeRemaining=0;d->fadeLength=uint32_t(fs*.02);
     d->delay=uint32_t(ceil(fs*.001));d->release=exp(-1/(fs*.05));d->limiterGain=1;
@@ -211,6 +214,7 @@ bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
 void meq_layout(MEQDSP*d,MEQChannel a,MEQChannel b,MEQChannel c,MEQChannel e){d->inL=a;d->inR=b;d->outL=c;d->outR=e;}
 void meq_process(MEQDSP*d,float*s,uint32_t n) {
     if(!d||d->delayLine.empty())return;
+    d->spectrum->capture(s,n);
     d->process(n,[s](int c,uint32_t i){return s[i*2+c];},[s](int c,uint32_t i,double v){s[i*2+c]=float(v);});
 }
 void meq_set_metering_enabled(MEQDSP*d,bool enabled) {
@@ -219,6 +223,13 @@ void meq_set_metering_enabled(MEQDSP*d,bool enabled) {
 }
 MEQMeter meq_meter(MEQDSP*d){return d->meter(false);}
 MEQMeter meq_take_meter(MEQDSP*d){return d->meter(true);}
+MEQSpectrumReader *meq_spectrum_reader_create(MEQDSP *d){return d->spectrum?new MEQSpectrumReader{d->spectrum}:nullptr;}
+void meq_spectrum_reader_destroy(MEQSpectrumReader *r){delete r;}
+void meq_spectrum_set_enabled(MEQSpectrumReader *r,bool enabled){r->capture->enable(enabled);}
+void meq_spectrum_request(MEQSpectrumReader *r){r->capture->request();}
+MEQSpectrumSnapshot meq_spectrum_format(MEQSpectrumReader *r){return {r->capture->frames,r->capture->rate,0,0,0};}
+bool meq_spectrum_take(MEQSpectrumReader *r,float *stereo,uint32_t frames,MEQSpectrumSnapshot *info){return r->capture->take(stereo,frames,*info);}
+MEQSpectrumStats meq_spectrum_stats(MEQSpectrumReader *r){auto &c=*r->capture;return {c.blocks.load(std::memory_order_relaxed),c.published.load(std::memory_order_relaxed),c.dropped.load(std::memory_order_relaxed)};}
 double meq_response(const MEQBand*b,int n,double f,double fs) {
     if(!valid(b,n,0)||!std::isfinite(f)||!std::isfinite(fs)||fs<32000)return 0;
     const auto z=std::polar(1.,-2*pi*f/fs);double db=0;

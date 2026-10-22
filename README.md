@@ -14,19 +14,20 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Equalizer window**
 
-![myEq equalizer window with eight parametric bands, frequency response, preamp, and stereo output meters](Screenshot%20App.png)
+![myEq equalizer window with a gentle input spectrum beneath the EQ curve, eight parametric bands, preamp, and stereo output meters](docs/images/editor-spectrum.png)
 
 **Menu bar**
 
 <img src="docs/images/menu-dark.png" width="354" alt="Menu panel with status, output, Your sound preset and response preview, and a subdued Open equalizer button">
 
-The menu preview is rendered from source; native popover chrome is not shown.
+Both previews are rendered from source with synthetic display data; native window/popover chrome is not shown.
 
 ## Features
 
 - Eight bands with bell, low/high shelf, and low/high cut filters; edit frequency, gain, and width numerically, with faders, or on the response graph.
 - Saved presets, automatic preamp, and stereo-linked sample-peak protection.
 - Independent L/R output meters with slowly falling peak markers and matching dBFS readings, updated at 30 Hz.
+- A gentle pre-EQ spectrum behind the frequency response, with fading trails, a remembered on/off toggle, and Reduce Motion support.
 - Menu bar access to output selection, presets, bypass, launch at login, and the editor.
 - Visual processing pauses when the editor is closed, hidden, minimized, or fully covered; audio processing continues.
 - Local audio processing through an output-only virtual device and shared memory. No audio recording, microphone capture, or network audio transport.
@@ -73,6 +74,8 @@ Always install the app, driver, and helpers from the same package. Build artifac
 Volume and mute follow the physical device where supported. Fixed-volume hardware remains fixed-volume; myEq never forces the hardware to full volume or applies the same attenuation twice. Quit eqMac before using myEq to avoid competing virtual-output routing.
 
 The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu refreshes its cached 128-point response preview and does not enable live metering. When both surfaces are hidden, all visual calculations stop. Audio buffering accounts for both the virtual output and hardware block sizes, keeping a two-block reserve of the larger size to avoid starvation when they differ. On enable or output selection, myEq requests at least 512 hardware frames where supported and attempts to match the virtual device. This device-wide setting can affect other audio apps and adds latency. Larger existing hardware buffers are preserved; myEq conditionally restores its changes when the session ends. Automatic reconnects do not repeatedly enforce the setting.
+
+**Spectrum** in the frequency-response header toggles the live background and remembers your choice. It shows input energy **before EQ**, combining left/right power so opposite-phase audio remains visible. The sage outline and trails fade gently beneath the EQ curve. Its fixed −90–0 dBFS display scale is separate from the graph's EQ-gain axis; it does not show how much gain a filter applies. Normal updates run at 30 Hz; macOS **Reduce Motion** uses 10 Hz without trails. Hiding the editor or switching Spectrum off stops capture, FFT analysis, and animation. The menu preview stays static. Samples remain in bounded process memory and are never recorded or sent elsewhere.
 
 ## Output compatibility
 

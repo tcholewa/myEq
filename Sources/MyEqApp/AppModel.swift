@@ -20,6 +20,8 @@ final class AppModel: ObservableObject {
   weak var menuWindow: NSWindow?
   let engine = AudioEngine()
   let outputMeter = OutputMeterModel()
+  let inputSpectrum = InputSpectrumModel()
+  @Published private(set) var spectrumEnabled = true
   private let store: PresetStore
   private var saveWork: DispatchWorkItem?
   private var graphWork: DispatchWorkItem?
@@ -60,6 +62,9 @@ final class AppModel: ObservableObject {
       loaded.current = .botaniq
     }
     saved = loaded
+    if !previewMode, UserDefaults.standard.object(forKey: "inputSpectrumEnabled") != nil {
+      spectrumEnabled = UserDefaults.standard.bool(forKey: "inputSpectrumEnabled")
+    }
     message = warning
     launchAtLogin = isInstalledApp && SMAppService.mainApp.status == .enabled
     engine.onUpdate = { [weak self] status in
@@ -82,7 +87,18 @@ final class AppModel: ObservableObject {
       guard let self, self.isEditorVisible else { return }
       self.outputMeter.update(levels)
     }
+    engine.onSpectrum = { [weak self] frame in
+      guard let self, self.isEditorVisible, self.spectrumEnabled else { return }
+      self.inputSpectrum.update(frame)
+    }
     let center = NSWorkspace.shared.notificationCenter
+    notifications.append(
+      center.addObserver(
+        forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil,
+        queue: .main
+      ) {
+        [weak self] _ in Task { @MainActor in self?.refreshSpectrumVisibility() }
+      })
     notifications.append(
       center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) {
         [weak self] _ in Task { @MainActor in self?.engine.setSleeping(true) }
@@ -187,10 +203,23 @@ final class AppModel: ObservableObject {
     guard isEditorVisible != visible else { return }
     isEditorVisible = visible
     engine.setEditorVisible(visible && !previewMode)
+    refreshSpectrumVisibility()
     outputMeter.reset()
     graphWork?.cancel()
     graphWork = nil
     if visible || isMenuVisible { refreshGraph() }
+  }
+  func setSpectrumEnabled(_ enabled: Bool) {
+    guard spectrumEnabled != enabled else { return }
+    spectrumEnabled = enabled
+    if !previewMode { UserDefaults.standard.set(enabled, forKey: "inputSpectrumEnabled") }
+    refreshSpectrumVisibility()
+  }
+  private func refreshSpectrumVisibility() {
+    inputSpectrum.update(nil)
+    engine.setSpectrumVisible(
+      isEditorVisible && spectrumEnabled && !previewMode,
+      reducedMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
   }
   func setMenuVisible(_ visible: Bool) {
     guard isMenuVisible != visible else { return }

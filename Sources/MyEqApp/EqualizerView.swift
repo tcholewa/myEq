@@ -151,6 +151,19 @@ struct EqualizerView: View {
             .foregroundStyle(Studio.ink.opacity(0.7))
           Rectangle().fill(Studio.line).frame(width: 1, height: 11).padding(.horizontal, 4)
         }
+        Button {
+          model.setSpectrumEnabled(!model.spectrumEnabled)
+        } label: {
+          Label("Spectrum", systemImage: "waveform.path")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(model.spectrumEnabled ? Studio.active.opacity(0.85) : Studio.secondary)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6).padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Show input spectrum")
+        .accessibilityValue(model.spectrumEnabled ? "On" : "Off")
+        .help("Input energy before EQ; independent of the EQ gain scale.")
         Capsule().fill(Studio.ink).frame(width: 14, height: 2)
         Text("Combined").font(.system(size: 10)).foregroundStyle(Studio.secondary)
       }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 10)

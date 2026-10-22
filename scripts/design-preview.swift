@@ -27,6 +27,16 @@ struct DesignPreview {
     try render(
       EqualizerView(model: model), width: 1040, height: 740,
       to: directory.appendingPathComponent("editor-small.png"))
+    try render(
+      EqualizerView(model: model), width: 1180, height: 900,
+      to: directory.appendingPathComponent("editor-spectrum.png"),
+      prepare: { spectrumFixture(model.inputSpectrum) })
+    try render(
+      EqualizerView(model: model), width: 1040, height: 740,
+      to: directory.appendingPathComponent("editor-spectrum-small.png"),
+      prepare: { spectrumFixture(model.inputSpectrum) })
+    model.inputSpectrum.update(nil)
+    verifySpectrumLayers()
     model.setEditorVisible(false)
     let hiddenCurves = model.curves
     model.edit { $0.bands[0].gain = 6 }
@@ -170,6 +180,60 @@ struct DesignPreview {
   static func drain() { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
 
   @MainActor
+  static func spectrumFixture(_ model: InputSpectrumModel) {
+    let now = ProcessInfo.processInfo.systemUptime
+    for index in 0..<15 {
+      let age = Double(14 - index) / 15
+      let values = (0..<SpectrumFrame.pointCount).map { point -> Float in
+        let x = Double(point) / Double(SpectrumFrame.pointCount - 1)
+        let bass = 32 * exp(-pow((x - 0.20 - age * 0.015) / 0.11, 2))
+        let voice = 15 * exp(-pow((x - 0.53) / 0.20, 2))
+        let texture = sin(x * 87 + age * 8) * 2 + cos(x * 43) * 3
+        return Float(max(-90, -69 + bass + voice + texture - age * 8))
+      }
+      model.update(SpectrumFrame(levels: values, sampleRate: 48000, timestamp: now - age))
+    }
+    RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+    CATransaction.flush()
+  }
+
+  @MainActor
+  static func verifySpectrumLayers() {
+    let model = InputSpectrumModel()
+    let view = SpectrumLayerView()
+    view.frame = CGRect(x: 0, y: 0, width: 1000, height: 198)
+    view.bind(model, visible: true, reducedMotion: false)
+    view.layoutSubtreeIfNeeded()
+    spectrumFixture(model)
+    let plot = view.layer!.sublayers!.first!
+    let trails = Array(plot.sublayers!.dropFirst().prefix(16))
+    precondition(trails.contains { $0.opacity > 0 })
+    precondition(plot.frame == CGRect(x: 34, y: 12, width: 954, height: 160))
+    precondition((plot.sublayers!.first!.mask as! CAShapeLayer).path != nil)
+    let oldOpacity = trails.first(where: { $0.opacity > 0 })!.opacity
+    RunLoop.main.run(until: Date().addingTimeInterval(0.12))
+    precondition(trails.first!.opacity < oldOpacity)
+    RunLoop.main.run(until: Date().addingTimeInterval(1.1))
+    precondition(plot.sublayers!.compactMap { $0 as? CAShapeLayer }.allSatisfy { $0.path == nil })
+    view.bind(model, visible: true, reducedMotion: true)
+    spectrumFixture(model)
+    precondition(trails.allSatisfy { $0.opacity == 0 })
+    view.bind(model, visible: false, reducedMotion: false)
+    spectrumFixture(model)
+    precondition(plot.sublayers!.compactMap { $0 as? CAShapeLayer }.allSatisfy { $0.path == nil })
+    precondition((plot.sublayers!.first!.mask as! CAShapeLayer).path == nil)
+    view.bind(model, visible: true, reducedMotion: false)
+    model.update(
+      SpectrumFrame(
+        levels: .init(repeating: -20, count: SpectrumFrame.pointCount), sampleRate: 32000,
+        timestamp: ProcessInfo.processInfo.systemUptime - 2))
+    precondition((plot.sublayers!.last as! CAShapeLayer).path == nil)
+    view.disconnect()
+    print(
+      "PASS: spectrum alignment, timed fade/expiry, Reduce Motion, hide and stale-frame clearing.")
+  }
+
+  @MainActor
   static func selectionObserver(in view: NSView) -> BandSelectionObserver.SelectionView? {
     if let observer = view as? BandSelectionObserver.SelectionView { return observer }
     for child in view.subviews {
@@ -180,7 +244,8 @@ struct DesignPreview {
 
   @MainActor
   static func render<Content: View>(
-    _ content: Content, width: CGFloat, height: CGFloat? = nil, to url: URL
+    _ content: Content, width: CGFloat, height: CGFloat? = nil, to url: URL,
+    prepare: (() -> Void)? = nil
   ) throws {
     let view = NSHostingView(
       rootView: content.frame(width: width, height: height).preferredColorScheme(.dark))
@@ -195,6 +260,7 @@ struct DesignPreview {
     view.setFrameSize(NSSize(width: width, height: finalHeight))
     drain()
     view.layoutSubtreeIfNeeded()
+    prepare?()
     guard
       let bitmap = NSBitmapImageRep(
         bitmapDataPlanes: nil,

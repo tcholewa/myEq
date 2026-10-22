@@ -429,3 +429,31 @@ After one readiness retry, myEq reported Equalizing with 512-frame physical/virt
 These are installed startup/transport checks, not audible or sustained-load acceptance. The user's compilation workload, hidden/visible CPU measurements, screen lock and user-switch checks remain pending. This installation did not push either local commit to the remote repository.
 
 On 2026-10-22, the user reported running at full load on installed 0.4.7 with **no drops so far**. A contemporaneous read-only check at 20:05:05–06 showed 0.0% CPU idle in both samples (load average 23.16). The recent myEq logs showed no helper reconnection, revocation or new transport-fault report after successful startup and the playback probes; the last reported transport counters remained zero underruns/overruns. This is a positive initial user listening check under observed CPU saturation. The duration of the full-load interval was not established, so it is not yet a sustained or repeated-load acceptance result.
+
+## Pre-EQ spectrum with fading trails (0.5.0 / build 15)
+
+On 2026-10-22, the editor gained an optional live input spectrum behind its frequency response. The remembered Spectrum switch defaults on; normal updates run at 30 Hz and Reduce Motion uses 10 Hz without trails. Visibility gates capture, analysis and drawing independently of audio/heartbeat control. No driver, helper, shared-transport or security-protocol change is included. The installed 0.4.7 app and active audio route were left running throughout development.
+
+Verification:
+
+- **46 Swift tests pass** normally and with ThreadSanitizer. New coverage checks calibrated bin-centered tone amplitude, log-frequency placement, opposite-phase and single-channel stereo, silence, non-finite input, every supported rate, frame-rate-independent envelopes, pre-EQ capture, reader lifetime after DSP destruction, hidden/stale delivery rejection, nonblocking detach with a blocked worker, and destruction disabling capture. Eight-band output matches a spectrum-disabled reference sample for sample from 32–192 kHz, including limiter operation, non-finite input, visibility changes and full snapshot slots.
+- The full native suite passes with AddressSanitizer/UndefinedBehaviorSanitizer, and the native control/spectrum suite passes with ThreadSanitizer. The final indexed slot-selection refinement also passes focused native ASan/UBSan and TSan runs. Capture fixtures cover non-dividing ring wrap, exact chronological stereo snapshots, capacity guards, three-slot saturation and bounded drops, newest-frame selection, rapid visibility epochs and concurrent producer/consumer/control churn. No suppressions were added.
+- Source-rendered fixtures at 1180 × 900 and 1040 × 740 pass graph alignment, timed trail fading/expiry, Reduce Motion, hidden/stale clearing and the existing neutral-focus/menu visibility checks. Both editor sizes were visually inspected; the subdued background leaves grid, curve and band controls legible. The README includes the synthetic full-editor preview. This does not establish installed-window interaction, VoiceOver or actual macOS Reduce Motion notification behavior.
+- Clang static analysis, strict Swift formatting, repository/documentation checks, whitespace checks, installer verification and unprivileged installer security fixtures pass. The signed Release development package reports 0.5.0/build 15, with verified component identities, recovery launch constraints and version consistency. It remains ad-hoc signed and unnotarized.
+
+### Synthetic CPU and callback budget
+
+`bash scripts/benchmark-spectrum.sh` compiles optimized production capture, analysis and layer-view sources, feeds generated stereo audio through eight filters at 48 kHz/512 frames, and runs an offscreen native view. Each measurement below lasts eight seconds after a 400 ms settling interval. CPU is process CPU with one core = 100%; it includes generated audio and DSP in every mode, but excludes the actual HAL/helper path, visible-window compositor/GPU cost and other app views.
+
+| Mode | Process CPU | Captured blocks | Published snapshots | Delivered frames |
+| --- | ---: | ---: | ---: | ---: |
+| Spectrum off | 1.17% | 0 | 0 | 0 |
+| Visible, 30 Hz | 3.57% | 743 | 240 | 240 |
+| Reduce Motion, 10 Hz | 2.07% | 744 | 80 | 81 |
+| Hidden | 1.37% | 0 | 0 | 0 |
+
+There were zero dropped snapshots in this run. The 30 Hz increment was **2.40 percentage points**, meeting the offline ≤3-point target. The first pre-optimization run measured a 2.88-point increment; these single runs include scheduler/CPU-frequency variation and do not isolate the optimization's effect. A phase-boundary in-flight frame accounts for the reduced-motion delivery count exceeding newly published snapshots by one. Hidden/off modes captured and delivered no new data. The off/hidden CPU difference is not evidence of active spectrum work, nor do these measurements establish whole-app power or end-to-end CPU overhead. Local logs are `build/spectrum-benchmark*.log` and are not published.
+
+The optimized C++ callback benchmark ran 12,000 blocks of 256 frames for each combination of meter/spectrum on/off at 44.1/48/96/192 kHz. With both enabled, p99 callback times were 15.08/12.96/14.17/15.92 µs (0.26/0.24/0.53/1.19% of the corresponding block duration). Every mode reported zero DSP faults. These offline elapsed times include scheduling noise; they exclude FFT/UI work and do not prove HAL scheduling under load. Reproduce with the C++ command earlier in this document; the updated benchmark reports a `spectrum` field.
+
+The candidate is `dist/myEq.pkg`, SHA-256 `abd2c55948e4ef47d46565262a2369378228c66b3c7f1c60df8d7a596df53a36`. It has **not been installed or pushed**. Remaining acceptance: audible playback and repeated compilation-load listening with Spectrum on/off, whole-app visible/hidden CPU/wakeups at 48/96/192 kHz, actual occlusion/minimize/close/reopen behavior, the remembered toggle, Reduce Motion changes, VoiceOver access to the switch and EQ controls, screen lock and output-device changes. The positive 0.4.7 listening check does not substitute for testing this new candidate.
