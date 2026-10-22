@@ -25,7 +25,7 @@ MEQConnection * _Nullable meq_connect(char * _Nonnull error, size_t capacity, bo
 bool meq_open_transport(MEQConnection * _Null_unspecified, double rate, const char * _Nonnull outputName, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 bool meq_activate_route(MEQConnection * _Null_unspecified, const char * _Nonnull outputUID, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 // Returns 1: healthy, 0: failure, 2: manual bypass, 3: destination disconnected.
-int meq_heartbeat(MEQConnection * _Null_unspecified, char * _Nonnull error, size_t capacity);
+int meq_heartbeat(MEQConnection * _Null_unspecified, char * _Nonnull error, size_t capacity, bool * _Nonnull retryable);
 void meq_close_transport(MEQConnection * _Nullable);
 void meq_disconnect(MEQConnection * _Nullable);
 MEQRenderer * _Nullable meq_renderer_create(MEQConnection * _Null_unspecified, MEQDSP * _Nonnull, double rate,

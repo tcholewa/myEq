@@ -61,6 +61,10 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
       xpc_dictionary_set_uint64(r,"generation",token);xpc_dictionary_set_value(r,"memory",next->object);sendReply(c,r);
     });return;
   }
+  if(op=="heartbeat"&&sessionSchema(m,"heartbeat")&&!generation&&retiredGeneration&&
+     xpc_dictionary_get_uint64(m,"generation")==retiredGeneration&&paired()){
+    sendReply(c,r,"Audio session expired; recovery is settling.",true);return;
+  }
   if(!sessionSchema(m,op.c_str())||!generation||xpc_dictionary_get_uint64(m,"generation")!=generation||!paired()){
     sendReply(c,r,"Invalid or stale audio session.");return;
   }
@@ -75,7 +79,8 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
     if(memory&&sessionActive){
       auto rendered=memory->s->rendered.load();if(rendered!=lastRender){lastRender=rendered;renderChanged=now();}
       if(now()-appBeat>1500*NSEC_PER_MSEC||now()-recoveryBeat>1500*NSEC_PER_MSEC||now()-renderChanged>1500*NSEC_PER_MSEC){
-        revoke();sendReply(c,r,"Audio session stopped; ordinary playback is being restored.");return;}
+        NSLog(@"myEq: bridge heartbeat expired app=%llu recovery=%llu render=%llu ms",(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);
+        revoke();sendReply(c,r,"Audio session stopped; ordinary playback is being restored.",true);return;}
       memory->s->deadline=now()+2*NSEC_PER_SEC;
     }
     sendReply(c,r);return;
@@ -129,6 +134,8 @@ int main(){@autoreleasepool{
   dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,NSEC_PER_SEC/4,NSEC_PER_MSEC*25);
   dispatch_source_set_event_handler(timer,^{
     if(generation&&(!paired()||(!sessionActive&&now()-appBeat>4*NSEC_PER_SEC)||
-       (sessionActive&&(now()-appBeat>1500*NSEC_PER_MSEC||now()-recoveryBeat>1500*NSEC_PER_MSEC||now()-renderChanged>1500*NSEC_PER_MSEC))))revoke();
+       (sessionActive&&(now()-appBeat>1500*NSEC_PER_MSEC||now()-recoveryBeat>1500*NSEC_PER_MSEC||now()-renderChanged>1500*NSEC_PER_MSEC)))){
+      NSLog(@"myEq: bridge revoked paired=%d app=%llu recovery=%llu render=%llu ms",paired(),(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);revoke();
+    }
   });dispatch_resume(timer);dispatch_main();
 }}

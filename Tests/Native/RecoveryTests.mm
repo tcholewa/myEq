@@ -32,7 +32,8 @@ static OSStatus mockSet(AudioObjectID,const AudioObjectPropertyAddress *a,UInt32
 #define AudioObjectGetPropertyData mockGet
 #define AudioObjectGetPropertyDataSize mockSize
 #define AudioObjectSetPropertyData mockSet
-static CFStringRef mockConsole(SCDynamicStoreRef,uid_t *uid,gid_t*){if(uid)*uid=getuid();return CFSTR("test");}
+static uid_t consoleUID=getuid();
+static CFStringRef mockConsole(SCDynamicStoreRef,uid_t *uid,gid_t*){if(uid)*uid=consoleUID;return CFSTR("test");}
 #define SCDynamicStoreCopyConsoleUser mockConsole
 #define main recovery_program_main
 #include "../../Helpers/Recovery.mm"
@@ -63,23 +64,41 @@ int main(){@autoreleasepool{
   // Recovery must wait for authenticated bridge retirement before touching defaults.
   bridge=xpc_connection_create(nullptr,nullptr);xpc_connection_set_event_handler(bridge,^(xpc_object_t){});xpc_connection_resume(bridge);
   bridgeReady=true;active=true;generation=17;
-  media=2;alerts=2;restore();assert(media==2&&alerts==2&&!settled);
+  media=2;alerts=2;beginActivity();assert(activity);restore();assert(activity);assert(media==2&&alerts==2&&!settled);
   completeRPC("deactivate",response());assert(media==2&&alerts==2);
   completeRPC("status",response());assert(media==3&&alerts==3&&!settled);
   assert(xpc_dictionary_get_uint64(pendingRPCs.front().message,"generation")==17);
-  completeRPC("settled",response());assert(settled&&pendingRPCs.empty());
+  completeRPC("settled",response());assert(settled&&pendingRPCs.empty()&&!activity);
   reconcile();assert(pendingRPCs.empty()); // No inactive status traffic once settled.
   // An old completion cannot restore over a new session.
   settled=false;media=2;alerts=2;reconcile();++epoch;active=true;generation=18;
-  completeRPC("status",response());assert(media==2&&alerts==2&&pendingRPCs.empty());
+  completeRPC("status",response());assert(media==2&&alerts==2&&pendingRPCs.empty()&&checking);
   // An active generation, malformed reply or timeout never authorizes restoration.
-  active=false;generation=0;
+  active=false;generation=0;checking=false;
   reconcile();completeRPC("status",response(18));assert(media==2&&alerts==2);
   reconcile();completeRPC("status",meq::message("status"));assert(media==2&&alerts==2);
   reconcile();completeRPC("status",nil);assert(media==2&&alerts==2);
   // A failed settlement acknowledgement leaves recovery pending for retry.
   reconcile();completeRPC("status",response());completeRPC("settled",nil);assert(!settled);
   reconcile();completeRPC("status",response());completeRPC("settled",response());assert(settled);
+  // A different console user cannot restore this user's routes.
+  consoleUID=getuid()+1;media=2;alerts=2;
+  assert(!foregroundSelf()&&!restoreDefaults()&&media==2&&alerts==2);
+  beginActivity();active=true;generation=19;tick();assert(!active&&!activity);
+  pendingRPCs.clear();consoleUID=getuid();
+  // Losing ownership during activation releases the activity and invalidates late completion.
+  beginActivity();activating=true;generation=20;auto oldEpoch=epoch;
+  finishActivation(nullptr,nil,oldEpoch,now());
+  assert(!activating&&!activity&&epoch!=oldEpoch);pendingRPCs.clear();
+  // A late heartbeat completion cannot clear a replacement session's pending request.
+  app=xpc_connection_create(nullptr,nullptr);xpc_connection_set_event_handler(app,^(xpc_object_t){});xpc_connection_resume(app);
+  active=true;activating=false;generation=21;media=2;heartbeatPending=false;tick();
+  assert(heartbeatPending&&pendingRPCs.size()==1);++epoch;
+  completeRPC("heartbeat",nil);assert(heartbeatPending&&active&&generation==21);
+  heartbeatPending=false;active=false;generation=0;xpc_connection_cancel(app);app=nil;
+  // Idempotent acquisition/release and same-owner lock do not manufacture new activity tokens.
+  beginActivity();id original=activity;beginActivity();assert(activity==original);
+  endActivity();endActivity();assert(!activity);
   xpc_connection_cancel(bridge);bridge=nil;
   std::cout<<"Recovery ownership and disconnect checks passed\n";
 }}

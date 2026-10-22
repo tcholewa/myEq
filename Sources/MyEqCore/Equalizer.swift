@@ -124,13 +124,14 @@ public enum EQResponse {
 }
 
 public enum AudioEngineState: Equatable {
-  case bypassed, starting, running
+  case bypassed, starting, reconnecting, running
   case suspended(String)
   case error(String)
   public var title: String {
     switch self {
     case .bypassed: return "Bypassed"
     case .starting: return "Starting…"
+    case .reconnecting: return "Reconnecting…"
     case .running: return "Equalizing"
     case .suspended: return "Paused"
     case .error: return "Needs attention"

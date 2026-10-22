@@ -95,13 +95,13 @@ final class AppModel: ObservableObject {
       center.addObserver(
         forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main
       ) {
-        [weak self] _ in Task { @MainActor in self?.engine.setSleeping(true) }
+        [weak self] _ in Task { @MainActor in self?.engine.refreshLoginSession() }
       })
     notifications.append(
       center.addObserver(
         forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main
       ) {
-        [weak self] _ in Task { @MainActor in self?.engine.setSleeping(false) }
+        [weak self] _ in Task { @MainActor in self?.engine.refreshLoginSession() }
       })
     refreshGraph()
     retryAudio()

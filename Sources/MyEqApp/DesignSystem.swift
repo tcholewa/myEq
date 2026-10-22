@@ -37,7 +37,7 @@ enum Studio {
     switch state {
     case .running: return active
     case .error, .suspended: return .orange
-    case .starting: return accent
+    case .starting, .reconnecting: return accent
     case .bypassed: return secondary
     }
   }

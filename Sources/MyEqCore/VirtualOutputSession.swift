@@ -13,6 +13,7 @@ final class VirtualOutputSession {
   private var device: AudioObjectID = 0
   private var sourceDevice: AudioObjectID = 0
   private var started = false
+  private var activity: NSObjectProtocol?
   private var diagnosticTime: TimeInterval = 0
   private var reportedUnderruns: UInt64 = 0
   private var reportedOverruns: UInt64 = 0
@@ -35,11 +36,13 @@ final class VirtualOutputSession {
     var error = [CChar](repeating: 0, count: 512)
     var retryable = false
     guard operation(&error, error.count, &retryable) else {
-      throw AudioFailure(message: String(cString: error), retryableStartup: retryable)
+      throw AudioFailure(message: String(cString: error), retryableConnection: retryable)
     }
   }
   func start(route: OutputRoute, preset: EQPreset, preamp: Double) throws {
     do {
+      activity = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep, reason: "System audio equalization")
       let bands = preset.bands.map(\.native)
       guard meq_prepare(dsp, route.rate, bands, Int32(bands.count), preamp) else {
         throw AudioFailure(message: "Invalid equalizer configuration.")
@@ -131,8 +134,11 @@ final class VirtualOutputSession {
         message: "Invalid audio buffers. Ordinary playback has been restored; Retry to reconnect.")
     }
     var error = [CChar](repeating: 0, count: 512)
-    let state = meq_heartbeat(connection, &error, error.count)
-    if state == 0 { throw AudioFailure(message: String(cString: error)) }
+    var retryable = false
+    let state = meq_heartbeat(connection, &error, error.count, &retryable)
+    if state == 0 {
+      throw AudioFailure(message: String(cString: error), retryableConnection: retryable)
+    }
     return Int(state)
   }
   private func syncVolume() {
@@ -180,6 +186,8 @@ final class VirtualOutputSession {
     connection = nil
     sourceDevice = 0
     volume = nil
+    if let activity { ProcessInfo.processInfo.endActivity(activity) }
+    activity = nil
   }
 }
 

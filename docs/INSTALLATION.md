@@ -44,6 +44,12 @@ Launch `/Applications/myEq.app` directly after quitting development copies. Xcod
 
 Check that the background helper is allowed in System Settings, then use **Retry**. Temporary connection failures retry automatically before showing an error. Reinstall the complete current package if components came from different builds.
 
+### Helper disconnect after screen lock
+
+Version 0.4.4 separates console-session eligibility from system sleep and declares ongoing audio/recovery work to macOS while EQ is active. A lock by itself is intended to leave EQ running. Temporary helper interruptions show **Reconnecting…** and retry four times; authentication/protocol failures remain errors. If retries are exhausted, use **Retry** after returning to your session. Actual sleep or switching users suspends EQ and returning resumes it when enabled.
+
+The lock-specific regression still requires installed playback confirmation; automated fixtures do not reproduce macOS screensaver scheduling. When reporting a recurrence, include whether the Mac locked, slept or switched users, whether Retry restored EQ, and the approximate time. Transition diagnostics identify connection/lease failures without recording audio.
+
 ### Driver installed but not loaded
 
 The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3 upgrade: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:

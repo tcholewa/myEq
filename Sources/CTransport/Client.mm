@@ -7,7 +7,7 @@ using namespace meq;
 namespace {
 struct ClientState {
   xpc_connection_t bridge=nil,recovery=nil;
-  std::atomic<bool> connected{true};
+  std::atomic<int> failure{0}; // 0 connected, 1 transient, 2 permanent; permanent wins.
   ~ClientState(){if(bridge)xpc_connection_cancel(bridge);if(recovery)xpc_connection_cancel(recovery);}
 };
 }
@@ -58,7 +58,9 @@ extern "C" MEQConnection *meq_connect(char *out,size_t size,bool *canRetry){
     auto peer=xpc_connection_create_mach_service(i?bridgeService:recoveryService,q,i?XPC_CONNECTION_MACH_SERVICE_PRIVILEGED:0);
     if(!constrain(peer,requirement(i?@"bridge":@"recovery"))){copyError(out,size,"Install this build of myEq before enabling EQ.");xpc_connection_cancel(peer);return nullptr;}
     if(i)c->state->bridge=peer;else c->state->recovery=peer;
-    xpc_connection_set_event_handler(peer,^(xpc_object_t event){if(xpc_get_type(event)==XPC_TYPE_ERROR)if(auto s=weak.lock())s->connected=false;});
+    xpc_connection_set_event_handler(peer,^(xpc_object_t event){if(xpc_get_type(event)==XPC_TYPE_ERROR)if(auto s=weak.lock()){int failure=retryable(event)?1:2;int previous=s->failure.load();
+      while(previous<failure&&!s->failure.compare_exchange_weak(previous,failure)){}
+      NSLog(@"myEq: %s connection event: %s",i?"bridge":"recovery",error(event).c_str());}});
     xpc_connection_resume(peer);
     auto result=handshakeResult(peer,"app");
     if(!succeeded(result)){
@@ -83,14 +85,19 @@ extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,si
   auto m=sessionMessage("activate",c->generation);xpc_dictionary_set_string(m,"uid",uid);
   auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
-extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size){
-  if(!c||!c->state->connected){copyError(out,size,"Audio helper connection was lost. Retry to reconnect.");return 0;}
+extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRetry){
+  *canRetry=false;
+  if(!c||c->state->failure.load()){
+    *canRetry=c&&c->state->failure.load()==1;
+    copyError(out,size,"Audio helper connection was lost. Retry to reconnect.");return 0;
+  }
   auto status=request(c->state->recovery,sessionMessage("status",c->generation),0.5);
-  if(!succeeded(status)||!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,error(status));return 0;}
+  if(!succeeded(status)){*canRetry=retryable(status);copyError(out,size,error(status));return 0;}
+  if(!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,"The recovery helper returned an invalid status.");return 0;}
   auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);
-  if(reason){copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
+  if(reason){*canRetry=reason==1&&retryable(status);copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
   auto r=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
-  if(!succeeded(r)){copyError(out,size,error(r));return 0;}return 1;
+  if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return 0;}return 1;
 }
 extern "C" void meq_close_transport(MEQConnection *c){
   if(!c||!c->generation)return;

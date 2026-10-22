@@ -1,5 +1,6 @@
 import CDSP
 import CoreAudio
+import CoreGraphics
 import Foundation
 
 public struct AudioOutput: Equatable, Identifiable {
@@ -37,6 +38,8 @@ public final class AudioEngine {
   private var applied: EQPreset?
   private var enabled = false
   private var sleeping = false
+  private var loginEligible: Bool?
+  private var reconnecting = false
   private var startupRetry = StartupRetry()
   private var blocked = false
   private var closing = false
@@ -63,6 +66,7 @@ public final class AudioEngine {
           self.route = nil
           self.blocked = false
           self.startupRetry.reset()
+          self.reconnecting = false
         }
         self.tick()
       }
@@ -87,6 +91,7 @@ public final class AudioEngine {
       if toggled || retry {
         self.blocked = false
         self.startupRetry.reset()
+        self.reconnecting = false
       }
       self.preset = preset
       self.enabled = enabled
@@ -99,11 +104,16 @@ public final class AudioEngine {
       self.meterMonitor?.setVisible(visible)
     }
   }
+  public func refreshLoginSession() {
+    queue.async { [weak self] in self?.tick() }
+  }
   public func setSleeping(_ sleeping: Bool) {
     queue.async { [weak self] in
+      NSLog("myEq: system sleep=%d", sleeping)
       self?.sleeping = sleeping
       self?.blocked = false
       self?.startupRetry.reset()
+      self?.reconnecting = false
       self?.tick()
     }
   }
@@ -129,6 +139,7 @@ public final class AudioEngine {
     DispatchQueue.main.async { [weak self] in self?.onUpdate?(value) }
   }
   private func stop() {
+    startupRetry.interrupted()
     meterMonitor?.setDSP(nil)
     session?.stop()
     session = nil
@@ -148,8 +159,30 @@ public final class AudioEngine {
   private func tick() {
     guard !closing else { return }
     defer { publish() }
-    var startingSession = false
     do {
+      let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
+      let eligible = LoginEligibility.allows(
+        uid: (dictionary?[kCGSessionUserIDKey as String] as? NSNumber)?.uint32Value,
+        onConsole: dictionary?[kCGSessionOnConsoleKey as String] as? Bool,
+        loginDone: dictionary?[kCGSessionLoginDoneKey as String] as? Bool,
+        ownUID: getuid())
+      if loginEligible != eligible {
+        loginEligible = eligible
+        NSLog("myEq: login session eligible=%d", eligible)
+        blocked = false
+        startupRetry.reset()
+        reconnecting = false
+      }
+      // Quiesce before checking a heartbeat that may have expired during sleep/switch.
+      if sleeping || !eligible {
+        stop()
+        snapshot.state =
+          enabled
+          ? .suspended(
+            sleeping ? "Mac is sleeping." : "This login session is inactive.") : .bypassed
+        return
+      }
+
       let all = OutputRoute.all()
       snapshot.outputs = all.filter { $0.channels.reduce(0, +) == 2 }.map {
         AudioOutput(id: $0.uid, name: $0.name)
@@ -191,6 +224,7 @@ public final class AudioEngine {
         route = current
         blocked = false
         startupRetry.reset()
+        reconnecting = false
       }
       snapshot.outputName = current?.name ?? "No output connected"
       snapshot.sampleRate = current?.rate ?? 48000
@@ -209,11 +243,6 @@ public final class AudioEngine {
         )
         return
       }
-      if sleeping {
-        stop()
-        snapshot.state = .suspended("Mac is sleeping.")
-        return
-      }
       guard let current else {
         stop()
         snapshot.state = .suspended("Connect an audio output. EQ will resume automatically.")
@@ -227,8 +256,7 @@ public final class AudioEngine {
       guard !blocked else { return }
       if session == nil {
         guard startupRetry.isReady(at: ProcessInfo.processInfo.systemUptime) else { return }
-        startingSession = true
-        snapshot.state = .starting
+        snapshot.state = reconnecting ? .reconnecting : .starting
         publish()
         snapshot.preamp =
           preset.autoPreamp
@@ -236,7 +264,7 @@ public final class AudioEngine {
         let newSession = VirtualOutputSession()
         try newSession.start(route: current, preset: preset, preamp: snapshot.preamp)
         session = newSession
-        startupRetry.reset()
+        startupRetry.healthy(at: ProcessInfo.processInfo.systemUptime)
         meterMonitor?.setDSP(newSession.dsp)
         applied = preset
       } else {
@@ -250,15 +278,16 @@ public final class AudioEngine {
             "Audio buffers changed unexpectedly. Ordinary playback has been restored. Retry to reconnect."
         )
       }
+      startupRetry.healthy(at: ProcessInfo.processInfo.systemUptime)
       snapshot.state = .running
     } catch {
+      let wasRunning = session != nil || reconnecting
       stop()
-      if startingSession
-        && startupRetry.schedule(for: error, at: ProcessInfo.processInfo.systemUptime)
-      {
-        // Keep the UI in Starting while launchd/driver connections settle. No extra timer.
-        snapshot.state = .starting
-        NSLog("myEq: retrying audio startup: %@", error.localizedDescription)
+      if startupRetry.schedule(for: error, at: ProcessInfo.processInfo.systemUptime) {
+        // Use the existing timer while authenticated helpers and routing settle.
+        reconnecting = wasRunning
+        snapshot.state = reconnecting ? .reconnecting : .starting
+        NSLog("myEq: retrying audio connection: %@", error.localizedDescription)
       } else {
         blocked = true
         snapshot.state = .error(error.localizedDescription)
@@ -281,15 +310,33 @@ public final class AudioEngine {
 struct StartupRetry {
   private var attempt = 0
   private var nextAttempt: TimeInterval = 0
+  private var healthySince: TimeInterval?
   mutating func reset() {
     attempt = 0
     nextAttempt = 0
+    healthySince = nil
+  }
+  mutating func interrupted() { healthySince = nil }
+  mutating func healthy(at time: TimeInterval) {
+    if healthySince == nil { healthySince = time }
+    if let since = healthySince, time - since >= 30 {
+      reset()
+      healthySince = time
+    }
   }
   func isReady(at time: TimeInterval) -> Bool { time >= nextAttempt }
   mutating func schedule(for error: Error, at time: TimeInterval) -> Bool {
-    guard (error as? AudioFailure)?.retryableStartup == true, attempt < 4 else { return false }
+    guard (error as? AudioFailure)?.retryableConnection == true, attempt < 4 else { return false }
+    healthySince = nil
     nextAttempt = time + 0.25 * pow(2, Double(attempt))
     attempt += 1
     return true
+  }
+}
+
+// Screen lock is not an eligibility input; console ownership and completed login are.
+enum LoginEligibility {
+  static func allows(uid: UInt32?, onConsole: Bool?, loginDone: Bool?, ownUID: UInt32) -> Bool {
+    ownUID >= 500 && uid == ownUID && onConsole == true && loginDone == true
   }
 }

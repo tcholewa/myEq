@@ -2,11 +2,27 @@
 #include "../../Sources/CTransport/IPC.hpp"
 #include <cassert>
 #include <iostream>
+#import <SystemConfiguration/SystemConfiguration.h>
 static int detachMessages=0;
+static xpc_object_t lastReply;
+static uid_t consoleUID=501,peerUID=501;
+static au_asid_t peerASID=42;
+static xpc_connection_t foreignSession;
+static CFStringRef mockConsole(SCDynamicStoreRef,uid_t *uid,gid_t*){*uid=consoleUID;return CFSTR("test");}
+static uid_t mockEUID(xpc_connection_t){return peerUID;}
+static au_asid_t mockASID(xpc_connection_t c){return c==foreignSession?43:peerASID;}
 static void mockSend(xpc_connection_t,xpc_object_t m){
-  if(meq::string(m,"op")=="detach")++detachMessages;
+  if(meq::string(m,"op")=="detach")++detachMessages;else lastReply=m;
 }
+static void mockReply(xpc_connection_t c,xpc_object_t r,const char *error="",bool retry=false){
+  if(!c||!r)return;
+  xpc_dictionary_set_string(r,"error",error);xpc_dictionary_set_bool(r,"retryable",retry);lastReply=r;
+}
+#define sendReply mockReply
 #define xpc_connection_send_message mockSend
+#define SCDynamicStoreCopyConsoleUser mockConsole
+#define xpc_connection_get_euid mockEUID
+#define xpc_connection_get_asid mockASID
 #define main bridge_program_main
 #include "../../Helpers/Bridge.mm"
 #undef main
@@ -27,6 +43,22 @@ int main(){@autoreleasepool{
   assert(detachMessages==1);
   generation=2;memory=std::make_shared<Mapping>();assert(memory->create(48000,2));
   revoke();assert(detachMessages==2);
+  // Retired-session heartbeat is retryable only for the current paired owner.
+  appPeer=xpc_connection_create(nullptr,nullptr);recoveryPeer=xpc_connection_create(nullptr,nullptr);
+  for(auto c:{appPeer,recoveryPeer}){xpc_connection_set_event_handler(c,^(xpc_object_t){});xpc_connection_resume(c);}
+  retiredGeneration=42;generation=0;
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));
+  assert(lastReply&&retryable(lastReply));
+  handle(appPeer,"app",sessionMessage("heartbeat",41),message("reply"));
+  assert(!retryable(lastReply));
+  foreignSession=recoveryPeer;assert(!paired());
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  foreignSession=nullptr;consoleUID=502;assert(!paired());
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  consoleUID=501;assert(paired());
+  generation=43;
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  for(auto c:{appPeer,recoveryPeer})xpc_connection_cancel(c);appPeer=nil;recoveryPeer=nil;generation=0;
   xpc_connection_cancel(driverPeer);driverPeer=nil;
 
   assert(retryable(nil)&&retryable(XPC_ERROR_CONNECTION_INTERRUPTED)&&retryable(XPC_ERROR_CONNECTION_INVALID));

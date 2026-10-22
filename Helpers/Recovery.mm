@@ -11,6 +11,10 @@ bool settled=false;
 xpc_connection_t restorePeer; xpc_object_t restoreResponse;
 bool active=false,activating=false,bridgeReady=false,connecting=false,checking=false,heartbeatPending=false;
 int reason=0;
+bool recoveryRetryable=false;
+id activity;
+void beginActivity(){if(!activity)activity=[[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Maintaining system audio recovery"];}
+void endActivity(){if(activity){[[NSProcessInfo processInfo] endActivity:activity];activity=nil;}}
 uint64_t generation=0,epoch=0;
 std::string target,oldAlerts;
 NSString *journal;
@@ -52,7 +56,8 @@ bool restoreDefaults(){
 }
 void reconcile();
 void restore(){
-  const auto old=generation;settled=false;++epoch;active=false;activating=false;generation=0;
+  NSLog(@"myEq: recovery restore reason=%d retryable=%d",reason,recoveryRetryable);
+  const auto old=generation;settled=false;++epoch;active=false;activating=false;checking=false;heartbeatPending=false;generation=0;
   if(bridgeReady&&old){auto c=bridge;requestAsync(c,sessionMessage("deactivate",old),queue,0.5,^(xpc_object_t){if(c==bridge)reconcile();});}
   else reconcile();
 }
@@ -66,14 +71,15 @@ void reconcile(){
   if(settled||active||activating||checking||!bridgeReady||!foregroundSelf())return;
   checking=true;const auto attempt=epoch;auto c=bridge;
   requestAsync(c,message("status"),queue,0.5,^(xpc_object_t r){
-    checking=false;if(c!=bridge||attempt!=epoch||active||activating||!foregroundSelf()||!succeeded(r))return;
+    if(c!=bridge||attempt!=epoch)return;checking=false;
+    if(active||activating||!foregroundSelf()||!succeeded(r))return;
     auto g=xpc_dictionary_get_value(r,"generation"),retired=xpc_dictionary_get_value(r,"retired");
     if(!g||!retired||xpc_get_type(g)!=XPC_TYPE_UINT64||xpc_get_type(retired)!=XPC_TYPE_UINT64||xpc_uint64_get_value(g))return;
     if(!restoreDefaults())return;
     // No new open can pass until this acknowledgement is handled by the bridge.
     requestAsync(c,sessionMessage("settled",xpc_uint64_get_value(retired)),queue,0.5,^(xpc_object_t result){
       if(c!=bridge||attempt!=epoch)return;
-      if(succeeded(result)){settled=true;sendReply(restorePeer,restoreResponse);restorePeer=nil;restoreResponse=nil;}
+      if(succeeded(result)){settled=true;endActivity();sendReply(restorePeer,restoreResponse);restorePeer=nil;restoreResponse=nil;}
     });
   });
 }
@@ -83,6 +89,8 @@ void connectBridge(){
   if(!constrain(c,requirement(@"bridge"))){xpc_connection_cancel(c);connecting=false;return;}
   bridge=c;
   xpc_connection_set_event_handler(c,^(xpc_object_t m){if(xpc_get_type(m)==XPC_TYPE_ERROR&&bridge==c){
+    NSLog(@"myEq: recovery bridge event: %s",error(m).c_str());
+    recoveryRetryable=retryable(m);reason=1;endActivity();
     bridge=nil;bridgeReady=false;settled=false;connecting=false;checking=false;heartbeatPending=false;++epoch;active=false;activating=false;generation=0;
   }});
   xpc_connection_resume(c);auto hello=message("hello");xpc_dictionary_set_string(hello,"role","recovery");
@@ -96,13 +104,16 @@ void connectBridge(){
   });
 }
 void finishActivation(xpc_connection_t c,xpc_object_t response,uint64_t attempt,uint64_t deadline){
-  if(attempt!=epoch||!owner(c)||!activating){sendReply(c,response,"Audio activation was superseded.");return;}
+  if(attempt!=epoch||!owner(c)||!activating){
+    if(attempt==epoch&&activating){reason=1;recoveryRetryable=false;restore();endActivity();}
+    sendReply(c,response,"Audio activation was superseded.");return;
+  }
   auto virtualID=find(deviceUID);
   if(!live(virtualID)&&now()<deadline){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,10*NSEC_PER_MSEC),queue,^{finishActivation(c,response,attempt,deadline);});return;}
   if(!live(virtualID)||!setDefault(kAudioHardwarePropertyDefaultOutputDevice,virtualID)||!setDefault(kAudioHardwarePropertyDefaultSystemOutputDevice,virtualID)){
     restore();sendReply(c,response,"macOS could not select the virtual output. Playback is being restored.",true);return;
   }
-  active=true;activating=false;reason=0;sendReply(c,response);
+  active=true;activating=false;reason=0;recoveryRetryable=false;sendReply(c,response);
 }
 void activate(xpc_connection_t c,xpc_object_t m,xpc_object_t response){
   if(active||activating||checking){sendReply(c,response,"Audio recovery is busy.",true);return;}
@@ -112,22 +123,29 @@ void activate(xpc_connection_t c,xpc_object_t m,xpc_object_t response){
   generation=xpc_dictionary_get_uint64(m,"generation");target=destination;
   oldAlerts=uid(current(kAudioHardwarePropertyDefaultSystemOutputDevice));if(oldAlerts==deviceUID)oldAlerts=target;
   if(!saveJournal()){generation=0;sendReply(c,response,"Cannot save the audio recovery journal. Playback was not redirected.");return;}
-  settled=false;activating=true;const auto attempt=++epoch;auto expectedBridge=bridge;
+  beginActivity();settled=false;activating=true;const auto attempt=++epoch;auto expectedBridge=bridge;
   requestAsync(bridge,sessionMessage("activate",generation),queue,1,^(xpc_object_t result){
-    if(attempt!=epoch||expectedBridge!=bridge||!owner(c)){sendReply(c,response,"Audio activation was superseded.");return;}
+    if(attempt!=epoch||expectedBridge!=bridge||!owner(c)){
+      if(attempt==epoch&&activating){reason=1;recoveryRetryable=false;restore();endActivity();}
+      sendReply(c,response,"Audio activation was superseded.");return;
+    }
     if(!succeeded(result)){restore();sendReply(c,response,error(result).c_str(),retryable(result));return;}
     finishActivation(c,response,attempt,now()+NSEC_PER_SEC);
   });
 }
 void tick(){
+  if(!foregroundSelf()){
+    if(active||activating){reason=1;recoveryRetryable=false;restore();}
+    endActivity();return;
+  }
   if(!bridge)connectBridge();
+  if((active||activating)&&!app){reason=1;recoveryRetryable=true;restore();return;}
   if(active){
-    if(!foregroundSelf()||!app){reason=1;restore();return;}
     if(!physical(find(target))){reason=3;restore();return;}
     if(uid(current(kAudioHardwarePropertyDefaultOutputDevice))!=deviceUID){reason=2;restore();return;}
     if(!heartbeatPending&&bridgeReady){heartbeatPending=true;const auto attempt=epoch;auto c=bridge;
       requestAsync(c,sessionMessage("heartbeat",generation),queue,0.5,^(xpc_object_t r){
-        heartbeatPending=false;if(c==bridge&&attempt==epoch&&!succeeded(r)){reason=1;restore();}
+        if(c!=bridge||attempt!=epoch)return;heartbeatPending=false;if(!succeeded(r)){reason=1;recoveryRetryable=retryable(r);restore();}
       });
     }
   }else reconcile();
@@ -138,7 +156,7 @@ void acceptPeer(xpc_connection_t c){
   if(pendingPeers>=32){xpc_connection_cancel(c);return;}++pendingPeers;auto p=std::make_shared<Peer>();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),queue,^{if(!p->ready){finishPending(p);xpc_connection_cancel(c);}});
   xpc_connection_set_event_handler(c,^(xpc_object_t m){
-    if(xpc_get_type(m)==XPC_TYPE_ERROR){finishPending(p);if(app==c){app=nil;reason=1;restore();}return;}
+    if(xpc_get_type(m)==XPC_TYPE_ERROR){finishPending(p);if(app==c){app=nil;reason=1;recoveryRetryable=retryable(m);restore();}return;}
     if(!p->pending&&!p->ready){xpc_connection_cancel(c);return;}
     auto r=replyMessage(m);if(!r){finishPending(p);xpc_connection_cancel(c);return;}
     if(!isMessage(m)){sendReply(c,r,"Protocol mismatch.");finishPending(p);xpc_connection_cancel(c);return;}
@@ -160,7 +178,7 @@ void acceptPeer(xpc_connection_t c){
     else if(op=="status"&&sessionSchema(m,"status")){
       auto requested=xpc_dictionary_get_uint64(m,"generation");
       if(generation&&requested!=generation){sendReply(c,r,"Invalid or stale audio session.");return;}
-      xpc_dictionary_set_int64(r,"reason",reason);xpc_dictionary_set_bool(r,"active",active);sendReply(c,r);
+      xpc_dictionary_set_int64(r,"reason",reason);xpc_dictionary_set_bool(r,"active",active);sendReply(c,r,"",reason==1&&recoveryRetryable);
     }else {sendReply(c,r,"Invalid recovery operation or session.");xpc_connection_cancel(c);}
   });xpc_connection_resume(c);
 }
@@ -182,6 +200,6 @@ int main(int argc,const char **argv){@autoreleasepool{
   auto timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,queue);
   dispatch_source_set_timer(timer,DISPATCH_TIME_NOW,NSEC_PER_SEC/4,NSEC_PER_MSEC*25);
   dispatch_source_set_event_handler(timer,^{tick();});dispatch_resume(timer);
-  [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceWillSleepNotification object:nil queue:nil usingBlock:^(NSNotification*){dispatch_async(queue,^{reason=1;restore();});}];
+  [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceWillSleepNotification object:nil queue:nil usingBlock:^(NSNotification*){dispatch_async(queue,^{reason=1;recoveryRetryable=true;restore();endActivity();});}];
   [[NSRunLoop currentRunLoop] run];return 0;
 }}
