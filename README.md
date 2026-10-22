@@ -57,7 +57,7 @@ python3 scripts/verify-installer.py
 open dist/myEq.pkg
 ```
 
-**Quit myEq and audio playback apps before installing.** The installer reloads Core Audio only for a fresh installation or changed driver/bridge, interrupting all sound, including calls and recordings. Verified app-only updates keep Core Audio running. After a reload, reopen playback apps so they reconnect; if audio apps remain stuck, save your work and restart your Mac.
+**Quit myEq and audio playback apps before installing.** The installer reloads Core Audio only for a fresh installation or changed driver/bridge, interrupting all sound, including calls and recordings. When verified driver/bridge identities are unchanged, the installer keeps Core Audio running. However, replacing the driver files can still unload the virtual output; this occurred during the tested 0.4.3 upgrade and required a [manual audio-service reload](docs/INSTALLATION.md#driver-installed-but-not-loaded). After a reload, reopen playback apps so they reconnect; if audio apps remain stuck, save your work and restart your Mac.
 
 Open `/Applications/myEq.app` and allow its background helper in **System Settings → General → Login Items & Extensions** if prompted. Select your physical output in myEq, then enable EQ.
 

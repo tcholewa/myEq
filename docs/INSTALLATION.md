@@ -26,7 +26,7 @@ The default build uses local ad-hoc signing and does not notarize the app or ins
 
 ## Install or upgrade
 
-Quit myEq and playback apps, including Music. Installation requires administrator authorization and briefly interrupts all audio by reloading Core Audio, including calls and recordings. Wait until that interruption is acceptable, then run the installer. A full Mac restart is not required.
+Quit myEq and playback apps, including Music. Installation requires administrator authorization. Fresh installations and changed driver/bridge identities trigger a Core Audio reload, briefly interrupting all audio, including calls and recordings. Upgrades with unchanged identities skip that reload, but replacing the driver files can still unload the virtual output and require a manual reload. Wait until an audio interruption is acceptable before installing. A full Mac restart is usually unnecessary, but may be needed if Core Audio remains stuck.
 
 The package installs `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, an unprivileged bridge service, the app's recovery helper, and a one-shot maintenance utility. The app, bridge, recovery helper and driver must come from the same package: rebuild and reinstall after updates rather than replacing only the app. Version 0.4 uses IPC protocol 2 and cannot be mixed with previous runtime components. The installer validates the signing hashes used to authenticate the components.
 
@@ -46,13 +46,13 @@ Check that the background helper is allowed in System Settings, then use **Retry
 
 ### Driver installed but not loaded
 
-The current installer reloads Core Audio automatically. For an older package or a driver that still has not loaded, first quit audio apps and wait until a system-wide audio interruption is acceptable, then run:
+The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3 upgrade: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:
 
 ```sh
 sudo killall -TERM coreaudiod
 ```
 
-macOS relaunches the service. Reopen playback apps afterward and retry myEq. Restarting macOS is an alternative.
+macOS relaunches the service. Reopen myEq and playback apps afterward. This restored the virtual output in the tested 0.4.3 upgrade without a Mac restart. If output discovery or Music remains stuck after a reload, save your work and restart macOS; repeatedly reloading the service did not resolve the earlier initialization hang. See the [installed upgrade results](VERIFICATION.md#043-installed-upgrade-verification).
 
 ### Music skips tracks after installation
 
