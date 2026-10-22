@@ -14,11 +14,13 @@ if [ "${1:-}" = "installed-ipc" ]; then
   build/native-tests/ipc-probe
   exit
 fi
-if [ "${1:-}" = "asan" ]; then common+=(-fsanitize=address -fno-omit-frame-pointer); fi
+if [ "${1:-}" = "asan" ]; then common+=(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all); fi
 xcrun clang++ "${common[@]}" Tests/Native/TransportTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/transport
 xcrun clang++ "${common[@]}" Tests/Native/DriverTests.mm -framework Foundation -framework CoreAudio -o build/native-tests/driver
 xcrun clang++ "${common[@]}" Tests/Native/RecoveryTests.mm -framework Foundation -framework CoreAudio -framework AppKit -framework SystemConfiguration -o build/native-tests/recovery
 xcrun clang++ "${common[@]}" Tests/Native/BridgeLifecycleTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/bridge-lifecycle
+xcrun clang++ "${common[@]}" Tests/Native/SecurityTests.mm -framework Foundation -framework SystemConfiguration -framework Security -o build/native-tests/security
+build/native-tests/security
 build/native-tests/bridge-lifecycle
 build/native-tests/driver
 build/native-tests/recovery

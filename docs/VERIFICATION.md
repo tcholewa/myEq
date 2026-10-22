@@ -233,3 +233,9 @@ These are not reported as passed:
 - Independently terminate the app, bridge, recovery agent, and driver host. Verify ordinary playback returns, defaults chosen manually are preserved, and no stale audio is replayed. Include sleep/wake, logout/user switching, and audio-service restart.
 - Run 30 minutes of playback/editing. Measure app + driver + helpers together and report Core Audio's incremental CPU separately; target approximately 2% hidden / 6% visible at 48 kHz and 256 frames on this Mac. Measure added wired latency against the under-20-ms target.
 - Exercise preset management, fields, graph/faders, persistence, menu bar reopening, and launch at login in the installed app.
+
+## Security hardening — runtime and persistence
+
+The protocol-v2 changes were tested with 30 passing Swift tests and the native suite under AddressSanitizer plus UndefinedBehaviorSanitizer. New checks use anonymous XPC endpoints (not installed services) to exercise actual runtime signature rejection, accepted signatures, one-way requests, and stale generation rejection. A fixed-seed 25,000-case loop exercises malformed message versions and adversarial ring cursors/metadata; file fixtures cover size bounds, symbolic links, and hard links. Driver tests assert that expired leases copy no frames. The test fixture substitutes console-user discovery, so these checks do not establish real multi-user isolation.
+
+The installed app and audio services were not changed or interrupted. Full multi-user, crash-recovery, installer, CPU and clean-Mac distribution validation remains required before a public binary release. No root escalation or unauthorized audio capture has been demonstrated by this review.

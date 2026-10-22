@@ -17,13 +17,15 @@ int main(){@autoreleasepool{
   xpc_connection_set_event_handler(driverPeer,^(xpc_object_t){});
   xpc_connection_resume(driverPeer);
   revoke();assert(detachMessages==0);
-  memory=std::make_shared<Mapping>();assert(memory->create(48000,1));
-  auto prior=memory;prior->s->active=1;prior->s->deadline=now()+NSEC_PER_SEC;
+  generation=1;memory=std::make_shared<Mapping>();assert(memory->create(48000,1));
+  auto prior=memory;
+  handle(nullptr,"app",sessionMessage("close",1),message("reply"));
+  assert(memory==prior); // A stale/non-current peer cannot revoke this mapping.prior->s->active=1;prior->s->deadline=now()+NSEC_PER_SEC;
   revoke();assert(detachMessages==1&&!memory&&!prior->s->active&&!prior->s->deadline);
   // Recovery restore, app close, and both disconnect events must not enqueue more HAL detaches.
   for(int i=0;i<4;i++)revoke();
   assert(detachMessages==1);
-  memory=std::make_shared<Mapping>();assert(memory->create(48000,2));
+  generation=2;memory=std::make_shared<Mapping>();assert(memory->create(48000,2));
   revoke();assert(detachMessages==2);
   xpc_connection_cancel(driverPeer);driverPeer=nil;
 

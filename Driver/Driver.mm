@@ -30,6 +30,7 @@ AudioServerPlugInDriverInterface interface;
 AudioServerPlugInDriverInterface *interfacePointer=&interface;
 AudioServerPlugInDriverRef driver=&interfacePointer;
 bool connecting=false;
+uint64_t configurationRevision=0,pendingGeneration=0;
 // Used only by the single WriteMix thread, reset while HAL has stopped IO.
 double expectedSampleTime=0;
 bool expectedSampleTimeValid=false;
@@ -45,16 +46,18 @@ struct Configuration {
   xpc_connection_t peer;
   xpc_object_t request;
   NSString *name;
+  uint64_t revision;
 };
 NSString *nameForOutput(const char *outputName){
   NSString *name=outputName?[NSString stringWithUTF8String:outputName]:nil;
   return name.length?[@"myEq: " stringByAppendingString:name]:@"myEq";
 }
 void configure(std::shared_ptr<Mapping> memory,xpc_connection_t peer=nil,xpc_object_t request=nil,NSString *name=@"myEq") {
-  auto c=new Configuration{memory,peer,request,name};
+  auto c=new Configuration{memory,peer,request,name,++configurationRevision};
+  pendingGeneration=memory?memory->acceptedGeneration:0;
   setAlive(false);
   if(host->RequestDeviceConfigurationChange(host,device,1,c)!=noErr){
-    if(request)reply(peer,request,"Core Audio rejected driver reconfiguration.");delete c;
+    if(request)sendReply(peer,request,"Core Audio rejected driver reconfiguration.");delete c;
   }
 }
 void connectBridge() {
@@ -66,26 +69,34 @@ void connectBridge() {
   NSDictionary *t=trustURL?[NSDictionary dictionaryWithContentsOfURL:(__bridge NSURL*)trustURL]:nil;
   if(trustURL)CFRelease(trustURL);
   NSString *hash=t[@"bridge"];
-  std::string req=hash?std::string("cdhash H\"")+hash.UTF8String+"\"":"";
+  NSCharacterSet *bad=[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet];
+  std::string req=([hash isKindOfClass:NSString.class]&&hash.length==40&&[hash rangeOfCharacterFromSet:bad].location==NSNotFound)?std::string("cdhash H\"")+hash.UTF8String+"\"":"";
   if(!constrain(c,req)){xpc_connection_cancel(c);connecting=false;return;}
   bridge=c;
   xpc_connection_set_event_handler(c,^(xpc_object_t m){
     if(xpc_get_type(m)==XPC_TYPE_ERROR){
       if(bridge==c){bridge=nil;connecting=false;setAlive(false);configure(nullptr);}return;
     }
-    if(!isMessage(m)){reply(c,m,"Protocol mismatch.");return;}
+    if(!isMessage(m)){xpc_connection_cancel(c);return;}
     auto op=string(m,"op");
-    if(op=="attach"){
+    if(op=="attach"&&schema(m,"attach",{{"generation",XPC_TYPE_UINT64},{"rate",XPC_TYPE_DOUBLE},{"memory",XPC_TYPE_SHMEM},{"outputName",XPC_TYPE_STRING,1024}})){
+      auto response=replyMessage(m);if(!response){xpc_connection_cancel(c);return;}
       auto next=std::make_shared<Mapping>();
-      if(!next->map(xpc_dictionary_get_value(m,"memory"))){reply(c,m,"Invalid shared memory.");return;}
-      configure(next,c,m,nameForOutput(xpc_dictionary_get_string(m,"outputName")));
-    }else if(op=="detach"){configure(nullptr);reply(c,m);}
-    else if(op=="refresh"){
-      auto s=mapping?mapping->s:nullptr;
-      setAlive(s&&s->active.load()&&now()<s->deadline.load());
-      changed(volumeControl,{kAudioLevelControlPropertyScalarValue});
-      changed(muteControl,{kAudioBooleanControlPropertyValue});reply(c,m);
-    }else reply(c,m,"Unknown driver operation.");
+      if(!next->map(xpc_dictionary_get_value(m,"memory"))||next->acceptedGeneration!=xpc_dictionary_get_uint64(m,"generation")||next->acceptedRate!=xpc_dictionary_get_double(m,"rate")){
+        sendReply(c,response,"Invalid shared memory.");return;
+      }
+      configure(next,c,response,nameForOutput(xpc_dictionary_get_string(m,"outputName")));
+    }else if((op=="detach"||op=="refresh")&&sessionSchema(m,op.c_str())){
+      auto token=xpc_dictionary_get_uint64(m,"generation");
+      if(op=="detach"){
+        if(token==pendingGeneration||(mapping&&token==mapping->acceptedGeneration)){
+          if(mapping){mapping->s->active=0;mapping->s->deadline=0;}configure(nullptr);
+        }
+      }else if(mapping&&token==mapping->acceptedGeneration){
+        auto s=mapping->s;setAlive(s->active.load()&&now()<s->deadline.load());
+        changed(volumeControl,{kAudioLevelControlPropertyScalarValue});changed(muteControl,{kAudioBooleanControlPropertyValue});
+      }
+    }else xpc_connection_cancel(c);
   });
   xpc_connection_resume(c);
   auto hello=message("hello");xpc_dictionary_set_string(hello,"role","driver");
@@ -208,10 +219,11 @@ OSStatus initialize(AudioServerPlugInDriverRef,AudioServerPlugInHostRef h){
 OSStatus perform(AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *info){
   auto c=static_cast<Configuration*>(info);
   onControl(^{
+    if(c->revision!=configurationRevision){sendReply(c->peer,c->request,"Driver configuration was superseded.");return;}
     bool nameChanged=false;
     {std::lock_guard<std::mutex> lock(stateMutex);
       realtime.store(nullptr,std::memory_order_release);mapping=c->memory;
-      if(mapping){rate=mapping->s->rate;realtime.store(mapping->s,std::memory_order_release);}
+      if(mapping){rate=mapping->acceptedRate;realtime.store(mapping->s,std::memory_order_release);}
       nameChanged=![deviceName isEqualToString:c->name];deviceName=c->name;
       anchor=mach_absolute_time();seed.fetch_add(1);clients=0;
       expectedSampleTimeValid=false;
@@ -219,7 +231,7 @@ OSStatus perform(AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *info){
     if(nameChanged)changed(device,{kAudioObjectPropertyName});
     changed(device,{kAudioDevicePropertyNominalSampleRate,kAudioObjectPropertyControlList});
     changed(stream,{kAudioStreamPropertyVirtualFormat,kAudioStreamPropertyPhysicalFormat});
-    if(c->request)reply(c->peer,c->request);
+    if(c->request)sendReply(c->peer,c->request);
   });delete c;return noErr;
 }
 OSStatus start(AudioServerPlugInDriverRef,AudioObjectID,UInt32){
@@ -238,7 +250,7 @@ OSStatus cycle(AudioServerPlugInDriverRef,AudioObjectID,UInt32,UInt32,UInt32,con
 OSStatus io(AudioServerPlugInDriverRef,AudioObjectID,AudioObjectID,UInt32,UInt32 op,UInt32 n,const AudioServerPlugInIOCycleInfo *cycle,void *buffer,void*){
   if(op==kAudioServerPlugInIOOperationWriteMix){
     auto s=realtime.load(std::memory_order_acquire);
-    if(s&&s->active.load(std::memory_order_relaxed)&&buffer){
+    if(s&&s->active.load(std::memory_order_acquire)&&now()<s->deadline.load(std::memory_order_relaxed)&&buffer&&cycle){
       double sample=cycle->mOutputTime.mSampleTime;
       if(cycle->mOutputTime.mFlags&kAudioTimeStampSampleTimeValid){
         if(expectedSampleTimeValid&&fabs(sample-expectedSampleTime)>.5)s->discontinuities.fetch_add(1,std::memory_order_release);
@@ -254,7 +266,7 @@ void setup(){
     [](AudioServerPlugInDriverRef,AudioObjectID)->OSStatus{return kAudioHardwareUnsupportedOperationError;},
     [](AudioServerPlugInDriverRef,AudioObjectID,const AudioServerPlugInClientInfo*)->OSStatus{return noErr;},
     [](AudioServerPlugInDriverRef,AudioObjectID,const AudioServerPlugInClientInfo*)->OSStatus{return noErr;},perform,
-    [](AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *p)->OSStatus{auto c=static_cast<Configuration*>(p);if(c->request)reply(c->peer,c->request,"Driver configuration was aborted.",true);delete c;return noErr;},
+    [](AudioServerPlugInDriverRef,AudioObjectID,UInt64,void *p)->OSStatus{auto c=static_cast<Configuration*>(p);if(c->request)sendReply(c->peer,c->request,"Driver configuration was aborted.",true);delete c;return noErr;},
     has,settable,propertySize,get,set,start,stop,timestamp,will,cycle,io,cycle};
 }
 }

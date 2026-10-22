@@ -14,7 +14,7 @@ struct ClientState {
 struct MEQConnection {
   std::shared_ptr<ClientState> state=std::make_shared<ClientState>();
   std::shared_ptr<Mapping> memory;
-  uint64_t volumeSequence=0;
+  uint64_t volumeSequence=0,generation=0;
 };
 struct MEQRenderer {
   std::shared_ptr<Mapping> memory;
@@ -32,6 +32,21 @@ struct MEQRenderer {
   std::array<float,8192> leftSamples{},rightSamples{};
   ~MEQRenderer(){if(converter){AudioUnitUninitialize(converter);AudioComponentInstanceDispose(converter);}}
 };
+extern "C" int meq_read_settings(const char *path,uint8_t **bytes,size_t *length){
+  *bytes=nullptr;*length=0;struct stat st{};if(lstat(path,&st)&&errno==ENOENT)return 1;
+  NSData *data=readFile(path,4*1024*1024,getuid());if(!data)return -1;
+  auto copy=static_cast<uint8_t*>(malloc(std::max(size_t(1),size_t(data.length))));if(!copy)return -1;
+  memcpy(copy,data.bytes,data.length);*bytes=copy;*length=data.length;return 0;
+}
+extern "C" bool meq_write_settings(const char *path,const uint8_t *bytes,size_t length){
+  if(length>4*1024*1024)return false;
+  return privateWrite(@(path),[NSData dataWithBytes:bytes length:length],4*1024*1024);
+}
+extern "C" bool meq_installation_id(char *value,size_t capacity){
+  id identifier=trust()[@"installationID"];
+  if(![identifier isKindOfClass:NSString.class]||![[NSUUID alloc] initWithUUIDString:identifier])return false;
+  copyError(value,capacity,[identifier UTF8String]);return true;
+}
 extern "C" MEQConnection *meq_connect(char *out,size_t size,bool *canRetry){
   *canRetry=false;
   auto c=std::make_unique<MEQConnection>();
@@ -58,27 +73,27 @@ extern "C" bool meq_open_transport(MEQConnection *c,double rate,const char *outp
   xpc_dictionary_set_string(m,"outputName",outputName);
   auto r=request(c->state->bridge,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}
   auto mapping=std::make_shared<Mapping>();
-  if(!mapping->map(xpc_dictionary_get_value(r,"memory"))||mapping->s->rate!=rate){copyError(out,size,"Invalid or incompatible driver transport.");return false;}
-  c->memory=mapping;c->volumeSequence=0;return true;
+  if(!mapping->map(xpc_dictionary_get_value(r,"memory"))||mapping->acceptedRate!=rate||mapping->acceptedGeneration!=xpc_dictionary_get_uint64(r,"generation")){copyError(out,size,"Invalid or incompatible driver transport.");return false;}
+  c->memory=mapping;c->generation=mapping->acceptedGeneration;c->volumeSequence=0;return true;
 }
 extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,size_t size,bool *canRetry){
   *canRetry=false;
-  auto m=message("activate");xpc_dictionary_set_string(m,"uid",uid);
+  auto m=sessionMessage("activate",c->generation);xpc_dictionary_set_string(m,"uid",uid);
   auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
 extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size){
   if(!c||!c->state->connected){copyError(out,size,"Audio helper connection was lost. Retry to reconnect.");return 0;}
-  auto status=request(c->state->recovery,message("status"),0.5);
-  if(!succeeded(status)){copyError(out,size,error(status));return 0;}
+  auto status=request(c->state->recovery,sessionMessage("status",c->generation),0.5);
+  if(!succeeded(status)||!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,error(status));return 0;}
   auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);
   if(reason){copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
-  auto r=request(c->state->bridge,message("heartbeat"),0.5);
+  auto r=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
   if(!succeeded(r)){copyError(out,size,error(r));return 0;}return 1;
 }
 extern "C" void meq_close_transport(MEQConnection *c){
-  if(!c)return;
-  request(c->state->recovery,message("restore"),1);
-  request(c->state->bridge,message("close"),0.5);c->memory.reset();
+  if(!c||!c->generation)return;
+  request(c->state->recovery,sessionMessage("restore",c->generation),3);
+  request(c->state->bridge,sessionMessage("close",c->generation),0.5);c->memory.reset();c->generation=0;
 }
 extern "C" void meq_disconnect(MEQConnection *c){delete c;}
 extern "C" bool meq_volume_request(MEQConnection *c,float *volume,bool *muted){

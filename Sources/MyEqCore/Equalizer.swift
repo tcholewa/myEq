@@ -1,4 +1,5 @@
 import CDSP
+import CTransport
 import Foundation
 
 public enum FilterType: Int32, Codable, CaseIterable, Identifiable, Sendable {
@@ -182,18 +183,28 @@ public final class PresetStore {
       .appendingPathComponent("myEq/settings.json")
   }
   public func load() throws -> SavedState {
-    guard FileManager.default.fileExists(atPath: url.path) else { return SavedState() }
-    let value = try JSONDecoder().decode(SavedState.self, from: Data(contentsOf: url))
+    var bytes: UnsafeMutablePointer<UInt8>?
+    var length = 0
+    let result = url.path.withCString { meq_read_settings($0, &bytes, &length) }
+    if result == 1 { return SavedState() }
+    guard result == 0, let bytes else { throw StoreError.invalid }
+    defer { free(bytes) }
+    let value = try JSONDecoder().decode(SavedState.self, from: Data(bytes: bytes, count: length))
     guard value.isValid else { throw StoreError.invalid }
     return value
   }
   public func save(_ state: SavedState) throws {
     guard state.isValid else { throw StoreError.invalid }
-    try FileManager.default.createDirectory(
-      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try encoder.encode(state).write(to: url, options: .atomic)
+    let data = try encoder.encode(state)
+    guard data.count <= 4 * 1024 * 1024 else { throw StoreError.invalid }
+    let written = data.withUnsafeBytes { buffer in
+      url.path.withCString {
+        meq_write_settings($0, buffer.baseAddress!.assumingMemoryBound(to: UInt8.self), data.count)
+      }
+    }
+    guard written else { throw StoreError.invalid }
   }
   public func preserveInvalidFile() throws -> URL? {
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }
@@ -207,5 +218,13 @@ public final class PresetStore {
     public var errorDescription: String? {
       "Saved settings are invalid or from an unsupported version."
     }
+  }
+}
+
+public enum InstallationMetadata {
+  public static func identifier() throws -> String {
+    var value = [CChar](repeating: 0, count: 64)
+    guard meq_installation_id(&value, value.count) else { throw PresetStore.StoreError.invalid }
+    return String(cString: value)
   }
 }

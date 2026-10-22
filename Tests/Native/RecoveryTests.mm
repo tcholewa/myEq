@@ -5,6 +5,8 @@
 #include <cstring>
 #include <cassert>
 #include <iostream>
+#import <SystemConfiguration/SystemConfiguration.h>
+#include <unistd.h>
 struct MockDevice {std::string uid;bool alive;UInt32 transport;};
 static std::map<UInt32,MockDevice> mockDevices;
 static UInt32 media=0,alerts=0;
@@ -22,6 +24,8 @@ static OSStatus mockSet(AudioObjectID,const AudioObjectPropertyAddress *a,UInt32
 #define AudioObjectGetPropertyData mockGet
 #define AudioObjectGetPropertyDataSize mockSize
 #define AudioObjectSetPropertyData mockSet
+static CFStringRef mockConsole(SCDynamicStoreRef,uid_t *uid,gid_t*){if(uid)*uid=getuid();return CFSTR("test");}
+#define SCDynamicStoreCopyConsoleUser mockConsole
 #define main recovery_program_main
 #include "../../Helpers/Recovery.mm"
 #undef main
@@ -30,14 +34,14 @@ int main(){@autoreleasepool{
   mockDevices={{2,{deviceUID,true,kAudioDeviceTransportTypeVirtual}},{3,{"usb",true,kAudioDeviceTransportTypeUSB}},
     {4,{"built-in",true,kAudioDeviceTransportTypeBuiltIn}},{5,{"alerts",true,kAudioDeviceTransportTypeHDMI}}};
   target="usb";oldAlerts="alerts";media=2;alerts=2;active=true;
-  restore();assert(media==3&&alerts==5&&!active);
+  assert(restoreDefaults());assert(media==3&&alerts==5);
   // A crash must not overwrite a user's subsequent manual selection.
-  media=4;alerts=5;active=true;restore();assert(media==4&&alerts==5);
+  media=4;alerts=5;active=true;restoreDefaults();assert(media==4&&alerts==5);
   // A missing physical target cannot be restored; choose an available physical fallback.
-  media=2;alerts=2;mockDevices[3].alive=false;restore();assert(media==4&&alerts==5);
+  media=2;alerts=2;mockDevices[3].alive=false;restoreDefaults();assert(media==4&&alerts==5);
   // Existing platform fallback wins over a different still-connected saved target.
-  media=4;alerts=2;mockDevices[3].alive=true;restore();assert(media==4&&alerts==5);
+  media=4;alerts=2;mockDevices[3].alive=true;restoreDefaults();assert(media==4&&alerts==5);
   // Missing alert output falls back to the selected media hardware.
-  media=2;alerts=2;mockDevices[5].alive=false;restore();assert(media==3&&alerts==3);
+  media=2;alerts=2;mockDevices[5].alive=false;restoreDefaults();assert(media==3&&alerts==3);
   std::cout<<"Recovery ownership and disconnect checks passed\n";
 }}

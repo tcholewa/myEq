@@ -109,20 +109,7 @@ final class AppModel: ObservableObject {
   private func prepareRecoveryAgent() async -> Bool {
     let service = SMAppService.agent(plistName: "com.tc.myEq.recovery.plist")
     do {
-      let trustData = try Data(
-        contentsOf: URL(fileURLWithPath: "/Library/Application Support/myEq/trust.plist"))
-      let trust =
-        try PropertyListSerialization.propertyList(from: trustData, format: nil)
-        as? [String: Any]
-      guard let installationID = trust?["installationID"] as? String,
-        UUID(uuidString: installationID) != nil
-      else {
-        throw NSError(
-          domain: "com.tc.myEq.setup", code: 2,
-          userInfo: [
-            NSLocalizedDescriptionKey: "Installation metadata is missing. Reinstall myEq.pkg."
-          ])
-      }
+      let installationID = try InstallationMetadata.identifier()
       let registrationKey = "recoveryRegistrationID"
       var status = service.status
       if status == .enabled,

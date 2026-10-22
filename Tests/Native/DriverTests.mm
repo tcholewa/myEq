@@ -32,7 +32,7 @@ int main(){@autoreleasepool{
   assert(settable(driver,device,0,&property,&can)==noErr&&!can);
   assert(get(driver,device,0,&property,0,nullptr,1,&size,objects)==kAudioHardwareBadPropertySizeError);
   auto shared=std::make_shared<Mapping>();assert(shared->create(48000,10));
-  realtime=shared->s;shared->s->active=1;
+  realtime=shared->s;shared->s->active=1;shared->s->deadline=now()+NSEC_PER_SEC;
   float samples[32]{};AudioServerPlugInIOCycleInfo times{};
   times.mOutputTime.mFlags=kAudioTimeStampSampleTimeValid;
   io(driver,device,stream,1,kAudioServerPlugInIOOperationWriteMix,16,&times,samples,nullptr);
@@ -42,6 +42,9 @@ int main(){@autoreleasepool{
   times.mOutputTime.mSampleTime=1000;
   io(driver,device,stream,1,kAudioServerPlugInIOOperationWriteMix,16,&times,samples,nullptr);
   assert(shared->s->written==48&&shared->s->discontinuities==1);
+  shared->s->deadline=1;
+  io(driver,device,stream,1,kAudioServerPlugInIOOperationWriteMix,16,&times,samples,nullptr);
+  assert(shared->s->written==48); // Expiration is enforced in WriteMix, not just a timer.
   realtime=nullptr;
 
   // Exercise the HAL configuration boundary and notifications, not just formatting.
