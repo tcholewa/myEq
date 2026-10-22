@@ -262,7 +262,7 @@ After that refresh, the active route was `myEq: ADAM Audio D3V`, stereo at 48 kH
 
 The first hosted security-update run passed Swift/native/sanitizer tests but failed package verification: macOS Bash 3.2 rejected expansion of an empty optional signing-arguments array under `set -u`, so no product archive was created. Packaging and notarization now use nonempty argument arrays. The correction is verified with an explicit `/bin/bash` build and expanded-package verification; it changes packaging tooling only and does not require reinstalling the working runtime.
 
-## Adaptive menu panel (0.4.1)
+## Adaptive menu panel draft (superseded before release)
 
 On 2026-10-22, the menu was reduced to a 344 × 282 pt control panel: status/native switch, output, preset, Open Equalizer and utility footer. It follows system appearance and uses semantic materials/colors, with explicit Reduce Motion, Reduce Transparency and Increase Contrast handling. The editor retains its existing design. Removing the menu graph also removes all menu-only response calculation; the visibility fixture verifies that opening/editing through the menu leaves editor curves parked until the editor appears.
 
@@ -273,3 +273,12 @@ An initial optimized render run stopped at the existing editor-focus assertion b
 The 0.4.1/build 8 Release installer builds under `/bin/bash`; expanded-package verification, Swift formatting, repository/documentation checks and whitespace checks pass. Package SHA-256: `c0b2a03674133e9936b3f3034b636f651399193c254435be85eed9375dd5ffd1`. No DSP, driver or helper implementation changed. The installed app/audio route was not modified, and this UI revision has not been installed or pushed during this task.
 
 Live menu tracking, arrow/Tab navigation, native focus rings, VoiceOver reading order, system accessibility settings and wallpaper-dependent vibrancy remain installed-window checks. The source-rendered previews deliberately do not show native outer popover chrome or claim active-window switch appearance. See the [layout and interaction specification](MENU-DESIGN.md).
+
+
+## Studio menu refinement (0.4.1)
+
+The adaptive draft above was rejected before installation or publication. The original studio panel is restored, with only the Flat/Neutral and Botaniq1/Reference quick-preset cards removed and Open equalizer switched to the shared subdued button style. The main preset selector and static response preview remain. The final source diff against installed 0.4.0 changes only those menu elements; graph visibility logic and editor presentation match 0.4.0.
+
+The source renderer passed existing focus, selection and hidden-visual-work assertions and produced six fixtures. The standard menu now measures 354 × 498 pt, with the representative attention state at 354 × 606 pt. Enabled, attention and long-name fixtures were visually inspected. README preview and the menu specification match this refinement. Live interaction was not rechecked, and the installed app/audio route was not changed.
+
+The 0.4.1/build 8 Release installer builds under `/bin/bash`. Expanded-package verification, Swift formatting, repository/documentation checks and whitespace checks pass. Final package SHA-256: `a0ea4b00f4dd255b3862725e34daee0bf2a591e22d3edd05f303aeb322f211b9`. This revision has not been installed or pushed.
