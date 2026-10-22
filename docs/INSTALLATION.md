@@ -20,7 +20,7 @@ python3 scripts/verify-installer.py
 open dist/myEq.pkg
 ```
 
-The build uses local ad-hoc signing and does not notarize the app or installer. The build and verification commands do not install anything or change audio routing.
+The default build uses local ad-hoc signing and does not notarize the app or installer. See [releasing](RELEASING.md) for the separate Developer ID candidate path. The build and verification commands do not install anything or change audio routing.
 
 `bash scripts/build.sh` builds app/driver artifacts without creating an installer. The app is staged at `build/artifacts.noindex/myEq.app`; Xcode products and temporary staging also live under `artifacts.noindex` to keep them out of Spotlight. `dist` contains the current installer. Quit a development preview before rebuilding it; the installed app can remain open during a build.
 
@@ -28,7 +28,9 @@ The build uses local ad-hoc signing and does not notarize the app or installer. 
 
 Quit myEq and playback apps, including Music. Installation requires administrator authorization and briefly interrupts all audio by reloading Core Audio, including calls and recordings. Wait until that interruption is acceptable, then run the installer. A full Mac restart is not required.
 
-The package installs `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, an unprivileged bridge service, and the app's recovery helper. The app, bridge, and driver must come from the same package: rebuild and reinstall after updates rather than replacing only the app. The installer refreshes the signing hashes used to authenticate the components.
+The package installs `/Applications/myEq.app`, the output-only driver under `/Library/Audio/Plug-Ins/HAL`, an unprivileged bridge service, the app's recovery helper, and a one-shot maintenance utility. The app, bridge, recovery helper and driver must come from the same package: rebuild and reinstall after updates rather than replacing only the app. Version 0.4 uses IPC protocol 2 and cannot be mixed with previous runtime components. The installer validates the signing hashes used to authenticate the components.
+
+Maintenance validates fixed installation paths, ownership, permissions, ACLs, signatures and the manifest before backing up or invoking recovery. It refuses symbolic links, hard links and unsafe existing installations instead of recursively changing their ownership. An upgrade runs a verified snapshot of the previous recovery helper as the console user. If validation fails, preserve the reported files for investigation; do not repair the failure with a blanket `chown` or `chmod`. A pre-existing app without a valid installation manifest needs manual review/removal before installing.
 
 Open `/Applications/myEq.app`. Allow the recovery helper in **System Settings → General → Login Items & Extensions** if prompted, select your physical output, and enable EQ. Reopen playback apps after installation so they reconnect to Core Audio.
 
@@ -75,3 +77,5 @@ sudo bash scripts/rollback.sh
 ```
 
 After removal or rollback, reload Core Audio with the command above, or restart macOS, to unload/reload the driver. Personal presets under `~/Library/Application Support/myEq` are preserved. Settings version 1 migrates to version 2 without losing presets or the enable preference; version 2 adds the preferred physical output UID. The installer retains rollback bundles in `.noindex` directories so they do not appear as launchable copies in Spotlight.
+
+The scripts require the maintenance utility installed by version 0.4 or later. Their launcher checks the executable and every ancestor for root ownership, safe permissions and absence of ACLs/links before running it. Rollback validates the retained complete package and keeps the current maintenance utility. Uninstall removes the active app, driver and helpers but deliberately retains root-owned recovery snapshots under `/Library/Application Support/myEq`; it does not recursively erase the support directory or user presets. Retained snapshots can contain older executable versions and should be removed by an administrator after recovery is no longer needed.

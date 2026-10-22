@@ -66,7 +66,7 @@ void connectBridge() {
   // Trust material is bundled with the driver because the driver sandbox cannot read installer files.
   CFBundleRef bundle=CFBundleGetBundleWithIdentifier(CFSTR("com.tc.myEq.driver"));
   auto trustURL=bundle?CFBundleCopyResourceURL(bundle,CFSTR("BridgeTrust"),CFSTR("plist"),nullptr):nullptr;
-  NSDictionary *t=trustURL?[NSDictionary dictionaryWithContentsOfURL:(__bridge NSURL*)trustURL]:nil;
+  NSDictionary *t=trustURL?readPlist([(__bridge NSURL*)trustURL fileSystemRepresentation],64*1024,0):nil;
   if(trustURL)CFRelease(trustURL);
   NSString *hash=t[@"bridge"];
   NSCharacterSet *bad=[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet];

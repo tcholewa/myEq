@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/signing.sh
 mkdir -p build dist
 artifacts=build/artifacts.noindex
 mkdir -p "$artifacts"
@@ -25,7 +26,7 @@ cp build/native/myEqRecovery "$package_dir/myEq.app/Contents/Helpers/"
 python3 scripts/package-trust.py agent "$package_dir/myEq.app/Contents/Library/LaunchAgents/com.tc.myEq.recovery.plist" "$package_dir/myEq.app/Contents/Helpers/myEqRecovery"
 swift scripts/icon.swift build/AppIcon.iconset
 cp build/AppIcon.icns "$package_dir/myEq.app/Contents/Resources/AppIcon.icns"
-codesign --force --sign - --options runtime "$package_dir/myEq.app"
+sign_code "$package_dir/myEq.app" com.tc.myEq
 codesign --verify --strict --verbose=2 "$package_dir/myEq.app"
 # Publish only the complete, verified bundle; retain the previous output until the move succeeds.
 if [ -e "$app" ]; then

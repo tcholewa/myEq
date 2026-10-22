@@ -1,21 +1,15 @@
 #!/bin/bash
 set -euo pipefail
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+umask 022
 if [ "${3:-/}" != / ]; then
-  echo "Install myEq on the current startup disk." >&2
+  echo 'Install myEq on the current startup disk.' >&2
   exit 1
 fi
-chown -R root:wheel /Applications/myEq.app /Library/Audio/Plug-Ins/HAL/myEq.driver '/Library/Application Support/myEq'
-chown root:wheel /Library/LaunchDaemons/com.tc.myEq.bridge.plist
-chmod 644 /Library/LaunchDaemons/com.tc.myEq.bridge.plist '/Library/Application Support/myEq/trust.plist'
-chmod 755 '/Library/Application Support/myEq/myEqBridge'
-codesign --verify --strict /Applications/myEq.app
-codesign --verify --strict /Library/Audio/Plug-Ins/HAL/myEq.driver
-# Every install (including a same-build reinstall) needs a fresh per-user registration.
-registration_id=$(/usr/bin/uuidgen)
-/usr/libexec/PlistBuddy -c "Add installationID string $registration_id" '/Library/Application Support/myEq/trust.plist'
-launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
-# Replacing the bundle unloads its HAL host, even when its code hash is unchanged.
-# Reload only after all signed components and their bridge are in place.
+script_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
+# Validate all components, their trust relationships and filesystem objects before launch.
+"$script_dir/myEqMaintenance" verify
+/bin/launchctl bootstrap system /Library/LaunchDaemons/com.tc.myEq.bridge.plist
 if /usr/bin/pgrep -x coreaudiod >/dev/null; then
   /usr/bin/killall -TERM coreaudiod
 fi

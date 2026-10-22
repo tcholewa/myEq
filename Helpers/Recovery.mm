@@ -147,9 +147,10 @@ void acceptPeer(xpc_connection_t c){
       p->challenged=true;sendReply(c,r);return;
     }
     if(!p->ready){
-      if(!schema(m,"ready")||!foregroundSelf()||xpc_connection_get_euid(c)!=getuid()||xpc_connection_get_asid(c)!=auditSession()||app){
+      if(!schema(m,"ready")||!foregroundSelf()||xpc_connection_get_euid(c)!=getuid()||xpc_connection_get_asid(c)!=auditSession()){
         sendReply(c,r,"Another myEq instance or login session is connected.");finishPending(p);xpc_connection_cancel(c);return;
       }
+      if(app){sendReply(c,r,"Another myEq instance is connected.",true);finishPending(p);xpc_connection_cancel(c);return;}
       app=c;p->ready=true;finishPending(p);sendReply(c,r);return;
     }
     if(!owner(c)){sendReply(c,r,"This connection no longer owns the session.");return;}

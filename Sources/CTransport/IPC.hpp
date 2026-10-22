@@ -99,7 +99,7 @@ inline std::string error(xpc_object_t r) {
 }
 inline void copyError(char *out,size_t n,const std::string &s) { if(out&&n)snprintf(out,n,"%s",s.c_str()); }
 inline NSDictionary *trust() {
-  return readPlist("/Library/Application Support/myEq/trust.plist",64*1024,0);
+  return readPlist("/Library/Application Support/myEq/trust.plist",64*1024,0,true);
 }
 inline std::string requirement(NSString *role) {
   NSDictionary *t=trust(); NSString *hash=t[role];

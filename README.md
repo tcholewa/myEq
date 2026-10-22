@@ -88,6 +88,8 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, chec
 
 Peak protection is a stereo-linked sample-peak limiter with 1 ms lookahead, not oversampled true-peak limiting. Hardware buffers, transport, and clock conversion add latency; the under-20-ms wired target still needs end-to-end measurement.
 
+Security hardening and its test limits are documented in the [security review](docs/SECURITY-REVIEW.md). Developer ID candidate tooling is available in the [release guide](docs/RELEASING.md); default source builds remain ad-hoc signed and unnotarized.
+
 ## License and acknowledgments
 
 myEq's original code and documentation are licensed under the [MIT License](LICENSE). Copyright © 2026 Tomasz Cholewa.

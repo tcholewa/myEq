@@ -28,13 +28,15 @@ bash scripts/test-native.sh asan
 xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
 bash scripts/build-installer.sh
 python3 scripts/verify-installer.py
+python3 scripts/test-installer-security.py
+python3 scripts/analyze-native.py
 ```
 
-Native tests exercise shared-memory concurrency, real Apple AUVarispeed rendering, driver properties, and mocked recovery/bridge behavior without installing a driver or changing the default output. Audio Unit tests need access to macOS Audio Unit services; restrictive sandboxes can prevent them from running.
+Native tests exercise shared-memory concurrency, real Apple AUVarispeed rendering, driver properties, and mocked recovery/bridge behavior without installing a driver or changing the default output. Audio Unit and anonymous XPC tests need access to macOS services; restrictive process sandboxes can prevent them from running. The sanitizer mode enables both AddressSanitizer and UndefinedBehaviorSanitizer. Installer fixtures compile the maintenance code with a private test root and suppressed service operations; they never install a driver or run root maintenance. Run them after building the package.
 
 For UI changes, also run `bash scripts/render-design.sh`. It renders synthetic editor/menu fixtures and checks visibility/focus behavior in never-shown windows. It currently depends on Xcode 27's SwiftPM product layout. Visually inspect the generated PNGs under `build/artifacts.noindex/design-preview`; these checks do not replace interaction testing in an installed window.
 
-GitHub Actions runs the repository checks, Swift tests, native tests (including AddressSanitizer), formatting, and installer build/verification on the hosted `xcode-27` Apple Silicon image with Xcode 27.1. It does not install the package, publish binaries, or run hardware acceptance tests. The runner is a [GitHub preview image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md); image availability can affect CI independently of the source.
+GitHub Actions runs the repository checks, Swift tests, native tests (including AddressSanitizer and UndefinedBehaviorSanitizer), formatting, and installer build/verification on the hosted `xcode-27` Apple Silicon image with Xcode 27.1. It does not install the package, publish binaries, or run hardware acceptance tests. The runner is a [GitHub preview image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md); image availability can affect CI independently of the source.
 
 ## Hardware checks
 

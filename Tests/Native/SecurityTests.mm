@@ -67,6 +67,7 @@ static void files(){
   NSString *dir=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
   NSString *path=[dir stringByAppendingPathComponent:@"state.plist"];
   NSData *bytes=[@"test" dataUsingEncoding:NSUTF8StringEncoding];assert(privateWrite(path,bytes,1024));
+  assert(openRootFile(path.fileSystemRepresentation)<0); // User-owned ancestors cannot supply installation trust.
   assert(readFile(path.fileSystemRepresentation,4,getuid()).length==4);assert(!readFile(path.fileSystemRepresentation,3,getuid()));
   NSString *link=[dir stringByAppendingPathComponent:@"link"];
   assert(symlink(path.fileSystemRepresentation,link.fileSystemRepresentation)==0);

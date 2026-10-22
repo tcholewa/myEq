@@ -38,7 +38,7 @@ jobs:
         run: swift test
       - name: Native tests
         run: bash scripts/test-native.sh
-      - name: Native tests with AddressSanitizer
+      - name: Native tests with AddressSanitizer and UndefinedBehaviorSanitizer
         run: bash scripts/test-native.sh asan
       - name: Swift formatting
         run: xcrun swift-format lint --strict -r Sources/MyEqCore Sources/MyEqApp Tests/MyEqCoreTests
@@ -46,3 +46,7 @@ jobs:
         run: bash scripts/build-installer.sh
       - name: Verify installer
         run: python3 scripts/verify-installer.py
+      - name: Installer security fixtures
+        run: python3 scripts/test-installer-security.py
+      - name: Native static analysis
+        run: python3 scripts/analyze-native.py

@@ -17,3 +17,7 @@ Security fixes are developed against the current default branch and latest relea
 The installer uses administrator authorization to install system components. At runtime, the bridge runs as an unprivileged service; the app/recovery helper run in the logged-in user's session. The design authenticates XPC peers and restricts session ownership. Shared memory carries audio locally. See [architecture](docs/ARCHITECTURE.md) for details and [verification](docs/VERIFICATION.md) for test coverage and known limits.
 
 Test on a development Mac. Installation, removal, and driver reloads can interrupt audio system-wide.
+
+## Hardening status
+
+Version 0.4 adds generation-bound IPC ownership, asynchronous recovery, lease enforcement, bounded persistence and verified installer maintenance. See the [security review](docs/SECURITY-REVIEW.md) for reproduced failures, mitigations and remaining validation. Automated tests are not a formal independent audit or proof that the app is vulnerability-free. Production signing and real clean-Mac/multi-user validation remain binary-release requirements.

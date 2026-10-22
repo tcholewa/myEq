@@ -3,6 +3,30 @@ import XCTest
 @testable import MyEqCore
 
 final class PresetTests: XCTestCase {
+  func testRejectsOversizedLinkedAndWritableSettings() throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let original = folder.appendingPathComponent("original.json")
+    let store = PresetStore(url: original)
+    try store.save(SavedState())
+    let linked = folder.appendingPathComponent("linked.json")
+    try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: original)
+    XCTAssertThrowsError(try PresetStore(url: linked).load())
+    XCTAssertThrowsError(try PresetStore(url: linked).save(SavedState()))
+    try FileManager.default.removeItem(at: linked)
+    try FileManager.default.linkItem(at: original, to: linked)
+    XCTAssertThrowsError(try store.load())
+    try FileManager.default.removeItem(at: linked)
+    try FileManager.default.setAttributes([.posixPermissions: 0o666], ofItemAtPath: original.path)
+    XCTAssertThrowsError(try store.load())
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: original.path)
+    try Data(repeating: 32, count: 4 * 1024 * 1024 + 1).write(to: original)
+    XCTAssertThrowsError(try store.load())
+    let backup = try XCTUnwrap(store.preserveInvalidFile())
+    XCTAssertEqual(try backup.resourceValues(forKeys: [.fileSizeKey]).fileSize, 4 * 1024 * 1024 + 1)
+  }
+
   func testVersionOneMigratesWithoutLosingPresetsOrEnablePreference() throws {
     var old = SavedState()
     old.current = .botaniq

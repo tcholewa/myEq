@@ -41,8 +41,52 @@ Package verification checks signatures, XPC identities, the recovery launch cons
 
 ## Distribution status
 
-The current tooling produces ad-hoc-signed local builds. It does not implement Developer ID signing or notarization. Public source availability does not make these packages notarized distribution builds; do not label a package as notarized or promise Gatekeeper acceptance without implementing and verifying that release path.
+Default builds remain ad-hoc signed and unnotarized. Production signing and notarization tooling is implemented, but has not been exercised with Developer ID credentials. Neither the current local package nor a passing source CI run establishes Gatekeeper acceptance or clean-Mac compatibility.
 
-For an initial source release, publish release notes with the macOS/architecture requirements, build instructions, known limitations, and the installer's Core Audio interruption. A general-audience binary release needs a separate signing/notarization change covering the app, driver, helpers, installer, and the trust hashes connecting them. Credentials belong in the release environment, never the repository.
+## Signed candidates
 
-Tagging, pushing, uploading a package, or publishing a release is a separate maintainer action. The checked-in CI workflow does none of those automatically.
+Obtain Developer ID Application and Developer ID Installer certificates through the Apple Developer Program. Import their private keys into a protected keychain and store notarization credentials using `xcrun notarytool store-credentials`. Never put credentials or exported keys in the repository.
+
+With the signing keychain available, set these variables to your own identities/profile:
+
+```sh
+export MYEQ_APPLICATION_IDENTITY='Developer ID Application: YOUR NAME (TEAMID)'
+export MYEQ_INSTALLER_IDENTITY='Developer ID Installer: YOUR NAME (TEAMID)'
+export MYEQ_TEAM_ID='TEAMID'
+export MYEQ_NOTARY_PROFILE='your-keychain-profile'
+# Optional: MYEQ_KEYCHAIN points to the keychain containing that profile.
+bash scripts/release.sh
+```
+
+The script signs helpers, maintenance utility, driver and app with hardened runtime and secure timestamps; derives component hashes after signing; signs the installer; and verifies Team ID, identifiers, hashes, launch constraints and entitlements. It then submits to Apple's notary service, requires `Accepted`, staples and validates the ticket, runs Gatekeeper assessment, and writes `dist/myEq.pkg.sha256`. Any failed step stops the script. It produces a candidate, not a published release. A local candidate is needed to perform the checks below.
+
+## Clean-Mac release gate
+
+Before publishing a binary, validate the exact source revision on a clean development Mac or VM and on supported audio hardware. Include installation, upgrade, rollback/removal, fast user switching, individual process crashes, sleep/wake, output/rate transitions, hidden/visible CPU and a quarantined download. Record observations, routes, timings, hardware and package SHA-256 as evidence. See [the hardware checklist](VERIFICATION.md#remaining-hardware-acceptance-checks).
+
+Only after those checks pass, create `docs/release-validation.json` with the following fields (this example deliberately cannot pass):
+
+```json
+{
+  "sourceCommit": "FULL_40_CHARACTER_TESTED_COMMIT",
+  "testedBy": "maintainer",
+  "testedAt": "ISO-8601 timestamp",
+  "macOS": "version and build",
+  "hardware": "Mac and tested output devices",
+  "evidence": "path or URL to observations and candidate SHA-256",
+  "checks": {
+    "cleanInstall": false, "upgrade": false, "rollback": false,
+    "uninstall": false, "fastUserSwitch": false, "crashRecovery": false,
+    "sleepWake": false, "audioMatrix": false, "cpuHidden": false,
+    "cpuVisible": false, "quarantinedDownload": false
+  }
+}
+```
+
+Commit the real record and run `python3 scripts/check-release-readiness.py` from a clean checkout. It requires every check to pass and rejects implementation changes since the tested ancestor commit. This is a maintainer attestation, not automated hardware testing or a cryptographic attestation of a rebuilt artifact. Verify the final candidate's checksum and downloaded package before publishing. No validation record is supplied until actual tests are completed.
+
+## GitHub signing environment
+
+The manual **Signed release candidate** workflow runs only on `master`, uses the `release-signing` environment and checks the validation record before accessing credentials. Configure required environment reviewers and a protected branch policy in GitHub. Add environment secrets `SIGNING_P12_BASE64` (both certificates and private keys), `SIGNING_P12_PASSWORD`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`, `DEVELOPER_ID_APPLICATION`, and `DEVELOPER_ID_INSTALLER`. The workflow uses a temporary keychain, removes it on exit, and uploads only a verified package and checksum as a short-lived candidate artifact. Its [artifact action](https://github.com/actions/upload-artifact/tree/cf430e030ddbb5b0abf93d22962f4752f3646cd9) is pinned to a full commit.
+
+Normal pull-request CI has no signing secrets. Do not run unreviewed changes in the signing environment. Environment settings and credentials are maintainer setup tasks; checking in the workflow does not configure them. Tagging, pushing, or publishing a GitHub Release remains a separate maintainer action.

@@ -40,4 +40,6 @@ else:
         "app": cdhash(sys.argv[3]),
         "bridge": cdhash("build/native/myEqBridge"),
         "recovery": cdhash("build/native/myEqRecovery"),
+        "driver": cdhash("build/native/myEq.driver"),
+        "maintenance": cdhash("build/native/myEqMaintenance"),
     }))

@@ -5,6 +5,7 @@
 #include <sys/acl.h>
 #include <unistd.h>
 #include <vector>
+#include <string>
 
 namespace meq {
 // Control/installation paths only. Never called by the audio thread.
@@ -20,8 +21,23 @@ inline bool noACL(int fd) {
   acl_entry_t entry;int result=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry);
   acl_free(acl);return result!=0;
 }
-inline NSData *readFile(const char *path,size_t limit,uid_t owner) {
-  FD fd(open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK));
+inline int openRootFile(const char *path) {
+  if(!path||path[0]!='/')return -1;
+  int dir=open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC);if(dir<0)return -1;
+  std::string remaining(path+1);
+  for(size_t slash;(slash=remaining.find('/'))!=std::string::npos;){
+    auto part=remaining.substr(0,slash);remaining.erase(0,slash+1);
+    if(part.empty()||part=="."||part==".."){close(dir);return -1;}
+    int next=openat(dir,part.c_str(),O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);close(dir);dir=next;
+    struct stat st{};
+    if(dir<0)return -1;
+    if(fstat(dir,&st)||st.st_uid!=0||(st.st_mode&0022)||!noACL(dir)){close(dir);return -1;}
+  }
+  if(remaining.empty()||remaining=="."||remaining==".."){close(dir);return -1;}
+  int result=openat(dir,remaining.c_str(),O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);close(dir);return result;
+}
+inline NSData *readFile(const char *path,size_t limit,uid_t owner,bool rootAncestors=false) {
+  FD fd(rootAncestors?openRootFile(path):open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK));
   struct stat st{};
   if(fd.value<0||fstat(fd.value,&st)||!S_ISREG(st.st_mode)||st.st_uid!=owner||
      (st.st_mode&0022)||st.st_nlink!=1||st.st_size<0||uint64_t(st.st_size)>limit||!noACL(fd.value))return nil;
@@ -32,8 +48,8 @@ inline NSData *readFile(const char *path,size_t limit,uid_t owner) {
   char extra;if(::read(fd.value,&extra,1)!=0)return nil;
   return data;
 }
-inline NSDictionary *readPlist(const char *path,size_t limit,uid_t owner) {
-  NSData *data=readFile(path,limit,owner);if(!data)return nil;
+inline NSDictionary *readPlist(const char *path,size_t limit,uid_t owner,bool rootAncestors=false) {
+  NSData *data=readFile(path,limit,owner,rootAncestors);if(!data)return nil;
   id value=[NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:nil error:nil];
   return [value isKindOfClass:NSDictionary.class]?value:nil;
 }
