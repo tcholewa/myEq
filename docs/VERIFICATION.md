@@ -193,6 +193,8 @@ The offscreen source-rendering check passes with real native numeric fields: ini
 
 The 0.3.3 Release installer builds and expanded-package verification passes, including component signatures, XPC trust hashes, the recovery spawn constraint, version 6, icon, and exact install scripts. Swift formatting, shell syntax, and whitespace checks pass. The compact editor fixture was visually inspected with no band or numeric field highlighted. Audio/DSP/driver code is unchanged.
 
+The 0.3.3 package was installed successfully on 2026-10-22 after myEq closed. The installed receipt reports 0.3.3/build 6; app, driver, and helper signatures match the verified package, the recovery spawn constraint matches its helper, and a fresh installation UUID is present. Core Audio automatically loaded the replacement driver at 48 kHz. With myEq closed, default playback remained on ADAM Audio D3V. Music was also closed by the end of installation. The focus implementation is committed as `4bad521`; a user-assisted initial-open and close/reopen focus check is pending because Computer Use access to myEq remains denied.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
