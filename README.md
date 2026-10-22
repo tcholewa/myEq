@@ -2,6 +2,16 @@
 
 A native macOS menu bar equalizer for the mixed system stereo output. Eight parametric bands, presets, automatic preamp, a response graph, and stereo-linked peak protection. Apple Silicon, macOS 27+, Xcode 27+.
 
+## Screenshots
+
+**Equalizer window**
+
+![myEq equalizer window with eight parametric bands, frequency response, preamp, and stereo output meters](Screenshot%20App.png)
+
+**Menu bar**
+
+<img src="Screenshot%20MenuBar.png" width="354" alt="myEq menu bar panel with output selection, preset controls, and EQ bypass">
+
 ## Build and install
 
 ```sh
