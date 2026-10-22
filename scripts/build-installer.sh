@@ -16,7 +16,7 @@ cp Installer/scripts/preinstall Installer/scripts/postinstall "$stage/scripts/"
 chmod 755 "$stage/scripts/preinstall" "$stage/scripts/postinstall"
 pkgbuild --analyze --root "$root" "$stage/components.plist"
 python3 scripts/package-trust.py components "$stage/components.plist"
-pkgbuild --root "$root" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.tc.myEq.installer --version 0.3.2 --install-location / "$stage/myEq-components.pkg"
+pkgbuild --root "$root" --component-plist "$stage/components.plist" --scripts "$stage/scripts" --identifier com.tc.myEq.installer --version 0.3.3 --install-location / "$stage/myEq-components.pkg"
 productbuild --distribution Installer/Distribution.xml --resources Installer/Resources --package-path "$stage" "$stage/myEq.pkg"
 mv "$stage/myEq.pkg" dist/myEq.pkg
 printf 'Installer: %s/dist/myEq.pkg\n' "$PWD"

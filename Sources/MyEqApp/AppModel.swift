@@ -224,10 +224,12 @@ final class AppModel: ObservableObject {
     operation(&saved.current)
     changed()
   }
-  func bandBinding<T>(_ index: Int, _ path: WritableKeyPath<EQBand, T>) -> Binding<T> {
+  func bandBinding<T: Equatable>(_ index: Int, _ path: WritableKeyPath<EQBand, T>) -> Binding<T> {
     Binding(
       get: { self.saved.current.bands[index][keyPath: path] },
       set: { value in
+        // TextField may commit its unchanged initial value when focus moves away.
+        guard value != self.saved.current.bands[index][keyPath: path] else { return }
         self.selectedBand = index
         self.edit { $0.bands[index][keyPath: path] = value }
       })

@@ -56,6 +56,8 @@ Band selection is optional and initially empty. A window-scoped local mouse-down
 
 A separate source-rendering utility constructs `AppModel(preview: true)`, preventing preference reads/writes, helper registration, and audio activation. Never-shown windows host fixture views for bitmap rendering. This verifies layout and visibility/model behavior without controlling the installed app; real menu interaction and window lifecycle still need a live check.
 
+The band-selection observer also provides a neutral native initial responder, so AppKit does not automatically highlight the first numeric field. Initial attachment and reopening after close clear both focus and band selection once, after SwiftUI finishes attaching its controls. Returning to an already open editor preserves deliberate editing focus. Mouse-down cancels any pending initial reset, and Tab still enters the normal key-view loop. An unchanged numeric binding write does not select a band or save settings.
+
 ## Lifecycle and recovery
 
 `myEqRecovery` is an independent per-user LaunchAgent registered by `SMAppService`. It is the sole owner of default-route writes. Before activating it writes a routing-only recovery journal, asks the bridge to activate the prepared renderer's lease, waits for driver availability, then redirects both default media and system sounds. The original alerts destination is preserved separately. Bypass/quit restores the current physical destination before the app stops its renderer. Cleanup changes a default only if it still points at myEq.

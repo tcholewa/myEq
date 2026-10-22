@@ -13,6 +13,7 @@ struct DesignPreview {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let model = AppModel(preview: true)
     verifySelection(model)
+    verifyInitialFocus(model)
     model.saved.enabled = true
     model.engineStatus.state = .running
     model.engineStatus.outputName = "ADAM Audio D3V"
@@ -68,6 +69,65 @@ struct DesignPreview {
     precondition(model.curves.count == 8 && model.curves[0] != hiddenCurves[0])
     print(
       "PASS: hidden editor/menu graphs stay parked; opening the menu computes only its static preview."
+    )
+  }
+
+  @MainActor
+  static func verifyInitialFocus(_ model: AppModel) {
+    let unchanged = model.saved.current
+    model.selectedBand = nil
+    let frequency = model.bandBinding(0, \.frequency)
+    frequency.wrappedValue = frequency.wrappedValue
+    precondition(model.selectedBand == nil && model.saved.current == unchanged)
+
+    let content = NSHostingView(rootView: EqualizerView(model: model))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
+      styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = content
+    drain()
+    guard let observer = selectionObserver(in: content) else {
+      fatalError("Missing selection observer")
+    }
+    precondition(window.initialFirstResponder === observer && window.firstResponder === observer)
+
+    // Exercise native field editing and the same window lifecycle notifications used by the app,
+    // in an offscreen fixture that is never ordered on screen or made key.
+    func fields(in view: NSView) -> [NSTextField] {
+      (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { fields(in: $0) }
+    }
+    guard let field = fields(in: content).first(where: { $0.isEditable }) else {
+      fatalError("Missing native numeric field")
+    }
+    precondition(window.makeFirstResponder(field))
+    precondition(window.firstResponder is NSTextView)
+    model.selectedBand = 0
+    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+    drain()
+    precondition(model.selectedBand == nil && window.firstResponder === observer)
+
+    window.recalculateKeyViewLoop()
+    window.selectNextKeyView(nil)
+    precondition(window.firstResponder !== observer && window.firstResponder !== window)
+    precondition(window.makeFirstResponder(field))
+    let editingResponder = window.firstResponder
+    model.selectedBand = 2
+    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+    drain()
+    precondition(window.firstResponder === editingResponder && model.selectedBand == 2)
+
+    NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+    drain()
+    precondition(model.selectedBand == nil && window.firstResponder === observer)
+    precondition(window.makeFirstResponder(field))
+    observer.handleClick(at: CGPoint(x: 20, y: 20), in: window)
+    precondition(window.firstResponder === observer && model.selectedBand == nil)
+    window.contentView = nil
+    window.close()
+    print(
+      "PASS: initial/reopened editor focus is neutral; Tab and deliberate field editing still work."
     )
   }
   @MainActor

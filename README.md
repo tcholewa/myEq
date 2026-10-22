@@ -27,7 +27,7 @@ This version replaces the process-tap backend with a virtual output and shared m
 
 ## Design
 
-Version 0.3.0 introduces a graphite studio interface with warm ivory type, gold controls, and color reserved for the eight bands. The editor groups the response and preamp together, adds filter-shape glyphs and width dials, and keeps stereo levels in a fixed footer. A compact layout fits the normal controls at 1040 × 740; additional notices can scroll. The app icon and menu bar symbol share the same three-fader mark.
+Version 0.3.0 introduces a graphite studio interface with warm ivory type, gold controls, and color reserved for the eight bands. The editor groups the response and preamp together, adds filter-shape glyphs and width dials, and keeps stereo levels in a fixed footer. A compact layout fits the normal controls at 1040 × 740; additional notices can scroll. The app icon and menu bar symbol share the same three-fader mark. Opening or reopening the editor starts with neutral keyboard focus and no band selected; click a field or press Tab to begin editing.
 
 ## Use
 

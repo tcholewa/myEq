@@ -183,6 +183,16 @@ A user-assisted full quit/reopen of Music followed by playback with EQ enabled w
 
 Music then reopened as process 98056 and EQ became active. The fresh-client probe passed at all three input rates: 44.1 kHz (64 callbacks), 48 kHz (69 callbacks), and 96 kHz (139 callbacks), with successful startup, no enqueue errors, and advancing sample times. The default media/system output remained `myEq: ADAM Audio D3V` at 48 kHz. The reopened Music process also rendered 1,146,368 frames through the virtual output (about 23.9 seconds at 48 kHz). A later route reconfiguration produced one generic HAL startup error, followed two seconds later by successful `AudioDeviceStart` on the myEq output; the original repeated invalid-destination failures were not observed in the new process. These checks confirm fresh-client playback works through the installed driver. Audible Music playback and whether track skipping has stopped still need the user's confirmation. The installer guidance is a source change for the next package; no additional reinstall is needed for this diagnostic.
 
+The user subsequently confirmed the Music result with **“perfect”** and moved on to the remaining first-band highlight issue.
+
+## Initial editor focus (0.3.3)
+
+The empty selection model did not address AppKit's automatic first-field focus. Also, numeric binding writes unconditionally selected their band, including unchanged values committed during focus transitions. The editor now supplies a neutral initial responder and clears selection on initial presentation or reopening after close. Returning to the same open editor preserves editing focus; real mouse-down cancels a pending initial reset. No-op binding writes now leave selection/settings untouched.
+
+The offscreen source-rendering check passes with real native numeric fields: initial/reopened focus is neutral, Tab reaches a control, direct field editing works, ordinary key-window notifications preserve ongoing edits, outside clicks clear focus, and unchanged binding writes leave the model unselected. All six layout fixtures and existing hidden-graph checks pass. These fixtures use never-shown windows and simulated lifecycle notifications; the installed SwiftUI window still needs a user-assisted reopen check.
+
+The 0.3.3 Release installer builds and expanded-package verification passes, including component signatures, XPC trust hashes, the recovery spawn constraint, version 6, icon, and exact install scripts. Swift formatting, shell syntax, and whitespace checks pass. The compact editor fixture was visually inspected with no band or numeric field highlighted. Audio/DSP/driver code is unchanged.
+
 ## Remaining hardware acceptance checks
 
 These are not reported as passed:
