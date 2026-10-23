@@ -52,16 +52,17 @@ final class SpectrumLayerView: NSView {
     plotLayer.masksToBounds = true
     layer?.addSublayer(plotLayer)
     fill.colors = [
-      NSColor(red: 0.91, green: 0.79, blue: 0.57, alpha: 0.52).cgColor,
-      NSColor(red: 0.60, green: 0.79, blue: 0.65, alpha: 0.44).cgColor,
-      NSColor(red: 0.29, green: 0.57, blue: 0.48, alpha: 0.24).cgColor,
+      NSColor(red: 0.86, green: 0.96, blue: 0.80, alpha: 0.88).cgColor,
+      NSColor(red: 0.66, green: 0.86, blue: 0.66, alpha: 0.76).cgColor,
+      NSColor(red: 0.35, green: 0.62, blue: 0.46, alpha: 0.58).cgColor,
+      NSColor(red: 0.12, green: 0.25, blue: 0.20, alpha: 0.30).cgColor,
     ]
-    fill.locations = [0, 0.3, 1]
+    fill.locations = [0, 0.35, 0.7, 1]
     fill.startPoint = CGPoint(x: 0.5, y: 0.25)
     fill.endPoint = CGPoint(x: 0.5, y: 1)
     fill.mask = barMask
     plotLayer.addSublayer(fill)
-    tips.fillColor = NSColor(red: 0.73, green: 0.88, blue: 0.72, alpha: 0.65).cgColor
+    tips.fillColor = NSColor(red: 0.80, green: 0.94, blue: 0.76, alpha: 0.82).cgColor
     plotLayer.addSublayer(tips)
     setAccessibilityElement(false)
   }

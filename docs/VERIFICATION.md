@@ -482,3 +482,7 @@ Verification:
 - `bash scripts/benchmark-spectrum.sh`: eight seconds per mode with synthetic 48 kHz stereo input and an offscreen native view. Spectrum off uses 0.81% of one CPU core, visible 30 Hz uses 3.14%, Reduce Motion 10 Hz uses 1.40%, and hidden uses 0.84%. The visible increment is 2.33 percentage points. There are zero dropped snapshots; off and hidden capture/deliver zero frames. This single run includes generated audio and DSP but excludes installed-app audio routing and visible compositor/GPU work.
 
 No package was installed and no live playback or installed-window interaction was tested for this change.
+
+### Stronger LED gradient preview
+
+The follow-up palette uses four gradient stops, progressing from dark teal bottom rows to pale sage upper rows, with brighter top cells. `bash scripts/render-design.sh --preview-only` successfully built and generated both editor sizes; both were visually inspected for the requested stronger contrast. Formatting, repository checks, and `git diff --check` pass. This palette-only revision is presented for user design approval; the automated UI/audio suites were not rerun and the installed app was not changed.
