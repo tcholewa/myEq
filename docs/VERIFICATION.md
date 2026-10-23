@@ -586,3 +586,30 @@ On 2026-10-24, the user authorized documentation, commits, push, and installatio
 Before reopening the app, Core Audio device enumeration showed that the virtual output had been unloaded during driver replacement. An administrator-authorized Core Audio reload restored it, then the installed app was opened. One bounded readiness retry was followed by **Equalizing** at 48 kHz with 512-frame physical/virtual buffers and a 1024-frame reserve. No helper-registration repair or Mac restart was needed.
 
 The installed bridge authenticated and rejected wrong-protocol/unauthorized-role requests. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual output. Initial post-startup diagnostics reported zero underruns and overruns, with three source discontinuities. This short startup/client check does not establish sustained audible playback or prove that the earlier 0.5.2 underruns are fixed. Visible-window GPU and whole-app performance remain separate from the offscreen rendering benchmarks.
+
+
+## 0.5.4 output spectrum and source ghost
+
+The approved design is implemented as 64 subtle output LED bars, source-plus-preamp outlines, and independent held peak markers. The main spectrum comes from actual samples after EQ and peak protection; it is not calculated from the input FFT and response curve. Both streams share a snapshot timestamp and are aligned through the limiter lookahead. Source gain follows the same preamp crossfade as processing. Bars rise immediately and fall at 24 dB/s; peaks hold one second and then fall at 6 dB/s. The cached texture, independent geometry caches, 30/10 Hz cadences, and visibility gating remain.
+
+Verification on 2026-10-24:
+
+- All 48 Swift tests pass under ThreadSanitizer. Spectrum tests verify measured EQ/preamp/limiter behavior, output sample identity, aligned source samples, preamp transitions, callbacks shorter than the lookahead, new visibility epochs, reader lifetime, stale delivery rejection, and meter-matched ballistics. Capture-enabled and disabled audio samples remain identical under snapshot pressure at five rates.
+- Native tests pass normally, with AddressSanitizer/UndefinedBehaviorSanitizer, and with ThreadSanitizer. The concurrent spectrum fixture checks both distinct streams in each published pair while visibility changes.
+- Native UI checks pass for 64 bars, cached geometry, source outlines, peak positions, resize, stale fading, visibility, Reduce Motion, meters, and editor focus. The focus fixture now explicitly lays out its never-shown window before checking deferred focus. Full-size and compact spectrum fixtures render successfully; the full-size result was visually inspected and the README screenshot refreshed.
+- Strict Swift formatting, repository/documentation checks, and `git diff --check` pass.
+
+A serial eight-second-per-mode offscreen benchmark compared the preserved 0.5.3 executable with 0.5.4, using generated 48 kHz stereo audio. CPU percentages represent one core and include synthetic audio generation, DSP, capture, analysis, and native layers; they exclude the visible compositor and hardware routing.
+
+| Mode | 0.5.3 | 0.5.4 |
+| --- | ---: | ---: |
+| Spectrum off | 1.03% | 1.12% |
+| Visible, 30 Hz | 2.73% | 2.98% |
+| Reduce Motion, 10 Hz | 2.10% | 1.82% |
+| Hidden | 1.35% | 1.14% |
+
+Both versions delivered 240 normal-cadence and 80 reduced-motion frames, with zero dropped snapshots and zero capture/delivery while off or hidden. The visible-minus-off increment was 1.70 versus 1.86 percentage points. This single comparison is a cost check for the added source FFT/ghost and held peaks, not a general performance improvement claim. Raw local results: `build/spectrum-054-baseline.jsonl` and `build/spectrum-054-candidate.jsonl`.
+
+The optimized callback benchmark ran 12,000 256-frame blocks in each of 16 rate/meter/spectrum combinations with zero DSP faults. With meters and paired capture enabled, p99 callback times were 14.75/14.92/15.21/20.33 µs at 44.1/48/96/192 kHz, respectively (0.25/0.28/0.57/1.52% of each block's deadline). It includes frequent preset transitions and requested snapshot publication; it does not establish hardware scheduling reliability. Raw local results: `build/dsp-spectrum-054.jsonl`.
+
+The Release installer builds successfully. Package verification passes component signatures, trust identities, helper launch constraints, version consistency, resources, notices, and installer scripts. Clang static analysis reports no native warnings. The package is `dist/myEq.pkg`, SHA-256 `73a51c1b936b2773dab4796debd069e17c8ebcbdff128ba9be770b0c90cb5a3b`; it is a local ad-hoc-signed, unnotarized development build. Installation results are recorded separately below.

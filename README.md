@@ -10,13 +10,13 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.3 (build 18)** uses **64 logarithmic LED bars** with cached rendering, soft sage tones, and finer cells that keep the EQ curve visually prominent. Stereo level meters retain their stronger contrast. Audio processing and peak-hold behavior are unchanged. See the [rendering benchmarks](docs/VERIFICATION.md#64-band-spectrum-rendering-optimization-2026-10-24) and [installed upgrade checks](docs/VERIFICATION.md#053-installed-upgrade-verification).
+Version **0.5.4 (build 19)** shows measured **post-EQ output** in 64 subtle LED bars, with a faint source-plus-preamp ghost. Bars and held peak markers fall with the same timing as the stereo level meters. Cached rendering and visibility gating keep the display lightweight. See the [implementation and verification](docs/VERIFICATION.md#054-output-spectrum-and-source-ghost).
 
 ## Screenshots
 
 **Equalizer window**
 
-![myEq equalizer window with a segmented LED input spectrum beneath the EQ curve, eight parametric bands, preamp, and stereo output meters](docs/images/editor-spectrum.png)
+![myEq equalizer window with a segmented LED output spectrum and faint source ghost beneath the EQ curve, eight parametric bands, preamp, and stereo output meters](docs/images/editor-spectrum.png)
 
 **Menu bar**
 
@@ -29,7 +29,7 @@ Both previews are rendered from source with synthetic display data; native windo
 - Eight bands with bell, low/high shelf, and low/high cut filters; edit frequency, gain, and width numerically, with faders, or on the response graph.
 - Saved presets, automatic preamp, and stereo-linked sample-peak protection.
 - Independent segmented LED L/R output meters with slowly falling peak markers and matching dBFS readings, updated at 30 Hz.
-- A subtle segmented LED pre-EQ spectrum behind the frequency response, with one bar per spectrum sample, a remembered on/off toggle, and Reduce Motion support.
+- A subtle segmented LED post-EQ spectrum with a source-plus-preamp ghost behind the frequency response, with one bar per spectrum sample, a remembered on/off toggle, and Reduce Motion support.
 - Menu bar access to output selection, presets, bypass, launch at login, and the editor.
 - Visual processing pauses when the editor is closed, hidden, minimized, or fully covered; audio processing continues.
 - Local audio processing through an output-only virtual device and shared memory. No audio recording, microphone capture, or network audio transport.
@@ -77,7 +77,7 @@ Volume and mute follow the physical device where supported. Fixed-volume hardwar
 
 The independent L/R output meters refresh at **30 Hz**, retain short transients, and measure after EQ and peak protection. Each horizontal meter has 45 LED cells, grading from dark teal on the left to pale sage toward the level tip, with amber/red warning colors near the maximum. Bars fall at 24 dB/second. White peak markers and their matching dBFS readings hold for one second, then fall together at 6 dB/second. Native layers avoid repeated SwiftUI layout. When the editor is hidden, minimized, closed, or fully occluded, visual polling, DSP peak measurement, and the editor’s response calculations stop. Opening only the menu refreshes its cached 128-point response preview and does not enable live metering. When both surfaces are hidden, all visual calculations stop. Audio buffering accounts for both the virtual output and hardware block sizes, keeping a two-block reserve of the larger size to avoid starvation when they differ. On enable or output selection, myEq requests at least 512 hardware frames where supported and attempts to match the virtual device. This device-wide setting can affect other audio apps and adds latency. Larger existing hardware buffers are preserved; myEq conditionally restores its changes when the session ends. Automatic reconnects do not repeatedly enforce the setting.
 
-**Spectrum** in the frequency-response header toggles the live background and remembers your choice. It shows input energy **before EQ**, combining left/right power so opposite-phase audio remains visible. Each of the 64 logarithmic spectrum samples drives its own segmented LED bar, with a subdued sage gradient and softly highlighted top cells beneath the EQ curve. Bar heights follow the existing smoothed input levels; they are independent of the eight EQ control points. Its fixed −90–0 dBFS display scale is separate from the graph's EQ-gain axis; it does not show how much gain a filter applies. Normal updates run at 30 Hz; macOS **Reduce Motion** uses 10 Hz. Hiding the editor or switching Spectrum off stops capture, FFT analysis, and animation. The menu preview stays static. Samples remain in bounded process memory and are never recorded or sent elsewhere.
+**Spectrum** in the frequency-response header toggles the live background and remembers your choice. Filled sage bars show actual output **after preamp, EQ, and peak protection**. Faint neutral outlines show the source with the applied preamp but without EQ or limiting, aligned to the same audio window. Both combine left/right power so opposite-phase audio remains visible. Each of the 64 logarithmic frequency samples drives one bar, independently of the eight EQ control points. Bars rise immediately and fall at 24 dB/s; pale peak markers hold for one second, then fall at 6 dB/s, matching the stereo meters. The fixed −90–0 dBFS spectrum scale is separate from the graph's EQ-gain axis. Normal updates run at 30 Hz; macOS **Reduce Motion** uses 10 Hz. Hiding the editor or switching Spectrum off stops capture, FFT analysis, and animation. The menu preview stays static. Samples remain in bounded process memory and are never recorded or sent elsewhere.
 
 ## Output compatibility
 

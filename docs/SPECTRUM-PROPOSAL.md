@@ -1,13 +1,13 @@
 # Output spectrum and falling peaks — design proposal
 
-Status: refined bars awaiting user approval; the source ghost treatment is accepted. This is a synthetic preview, not an implemented live audio feature.
+Status: approved and implemented for 0.5.4/build 19. Images below retain the synthetic design proposal; the live implementation and verification are described in [architecture](ARCHITECTURE.md#output-spectrum-and-source-ghost-054) and [verification](VERIFICATION.md#054-output-spectrum-and-source-ghost).
 
 ## Proposed presentation
 
 - The main 64 sage LED bars show the measured output after preamp, EQ correction, and peak protection.
 - Refined styling makes the output quieter beneath the EQ curve: bars occupy 50% of band spacing, with 1.75-point segments on a 4-point pitch. The sage gradient retains its light top and dark base with reduced opacity (0.44, 0.34, 0.22, 0.12). Peak markers are one point high at 0.30 opacity. Ghost geometry, color, and motion remain unchanged.
 - Each bar attacks immediately and falls at 24 dB/s. Its separate light peak marker holds for one second, then falls at 6 dB/s, matching the stereo level meter timings.
-- An optional faint neutral outline shows the source spectrum with the current preamp applied, but without EQ correction. It uses the same frequency positions and dBFS scale. The ghost has no additional held-peak markers.
+- A faint neutral outline shows the source spectrum with the current preamp applied, but without EQ correction. It uses the same frequency positions and dBFS scale. The ghost has no additional held-peak markers.
 - The EQ response curve stays above both spectra. Spectrum levels retain their own −90–0 dBFS mapping; the graph's gain labels still describe the EQ curve.
 
 The output-only variation remains available for comparison; the user accepted the source ghost's visual treatment while requesting subtler output bars.
@@ -26,4 +26,4 @@ The preview uses a deterministic synthetic spectral shape, adds the displayed pr
 
 The proposal lives entirely in the design-rendering scripts. It decorates offscreen editor views and does not change production rendering, capture, FFT analysis, saved preferences, or the installed app. The animation prioritizes reproducible design review, not runtime performance measurement.
 
-After approval, production output data must come from an actual post-processing tap, not from applying a response curve to the input FFT. The source and output displays must be time-aligned, and the existing cached 64-band renderer, visibility gating, Reduce Motion behavior, and bounded audio-thread capture must be retained. Runtime performance and audio isolation will require verification at that stage.
+The production implementation captures actual post-processing samples and a time-aligned source-plus-preamp stream. It retains cached 64-band rendering, visibility gating, Reduce Motion behavior, and bounded capture. The default display includes the approved ghost; the output-only image above remains a design comparison, not a separate user preference.

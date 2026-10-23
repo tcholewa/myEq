@@ -5,12 +5,19 @@ public struct SpectrumFrame: Equatable {
   public static let pointCount = 64
   public static let floorDB: Float = -90
   public let levels: [Float]
+  public let sourceLevels: [Float]
+  public let peaks: [Float]
   public let sampleRate: Double
   public let timestamp: TimeInterval
   public let sequence: UInt64
   public var frequencyLimit: Double { min(20000, sampleRate * 0.45) }
 
-  public init(levels: [Float], sampleRate: Double, timestamp: TimeInterval, sequence: UInt64 = 0) {
+  public init(
+    levels: [Float], sampleRate: Double, timestamp: TimeInterval, sequence: UInt64 = 0,
+    sourceLevels: [Float] = [], peaks: [Float] = []
+  ) {
+    self.sourceLevels = sourceLevels
+    self.peaks = peaks.isEmpty ? levels : peaks
     self.levels = levels
     self.sampleRate = sampleRate
     self.timestamp = timestamp
@@ -21,18 +28,24 @@ public struct SpectrumFrame: Equatable {
 public struct SpectrumEnvelope {
   public private(set) var levels = [Float](
     repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount)
+  public private(set) var peaks = [Float](
+    repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount)
+  private var holds = [TimeInterval](repeating: 0, count: SpectrumFrame.pointCount)
   public init() {}
   public mutating func update(_ input: [Float], elapsed: TimeInterval) {
     guard input.count == levels.count else { return }
-    let dt = max(0, min(1, elapsed))
-    let attack = Float(exp(-dt / 0.045))
-    let release = Float(exp(-dt / 0.250))
+    let dt = elapsed.isFinite ? max(0, elapsed) : 0
     for i in levels.indices {
       let target =
         input[i].isFinite ? min(0, max(SpectrumFrame.floorDB, input[i])) : SpectrumFrame.floorDB
-      let coefficient = target > levels[i] ? attack : release
-      levels[i] = target + coefficient * (levels[i] - target)
-      if levels[i] < SpectrumFrame.floorDB + 0.02 { levels[i] = SpectrumFrame.floorDB }
+      levels[i] = max(target, levels[i] - Float(24 * dt))
+      let falling = max(0, dt - holds[i])
+      holds[i] = max(0, holds[i] - dt)
+      peaks[i] = max(SpectrumFrame.floorDB, peaks[i] - Float(6 * falling))
+      if target > SpectrumFrame.floorDB, target >= peaks[i] {
+        peaks[i] = target
+        holds[i] = 1
+      }
     }
   }
 }

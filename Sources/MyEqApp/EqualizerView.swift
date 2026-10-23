@@ -161,9 +161,11 @@ struct EqualizerView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 6).padding(.vertical, 5)
         .contentShape(Rectangle())
-        .accessibilityLabel("Show input spectrum")
+        .accessibilityLabel("Show output spectrum")
         .accessibilityValue(model.spectrumEnabled ? "On" : "Off")
-        .help("Input energy before EQ; independent of the EQ gain scale.")
+        .help(
+          "Filled bars show output after EQ and peak protection. Faint outlines show source plus preamp. Spectrum levels use a separate scale from EQ gain."
+        )
         Capsule().fill(Studio.ink).frame(width: 14, height: 2)
         Text("Combined").font(.system(size: 10)).foregroundStyle(Studio.secondary)
       }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 10)

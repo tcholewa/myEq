@@ -76,27 +76,112 @@ final class SpectrumTests: XCTestCase {
     for _ in 0..<10 { slow.update(loud, elapsed: 0.1) }
     XCTAssertEqual(fast.levels[0], slow.levels[0], accuracy: 0.001)
     fast.update(silence, elapsed: 0.25)
-    XCTAssertLessThan(fast.levels[0], -55)
+    XCTAssertEqual(fast.levels[0], -18, accuracy: 0.001)
+    XCTAssertEqual(fast.peaks[0], -12)
+    fast.update(silence, elapsed: 1)
+    XCTAssertEqual(fast.peaks[0], -13.5, accuracy: 0.001)
+    var meter = OutputMeterEnvelope()
+    var spectrum = SpectrumEnvelope()
+    for target: Float in [-12, -30, -40, -8, -30, -50] {
+      meter.update(OutputLevels(left: pow(10, target / 20), active: true), elapsed: 0.4)
+      spectrum.update([Float](repeating: target, count: 64), elapsed: 0.4)
+      XCTAssertEqual(Double(spectrum.levels[0]), meter.leftDB, accuracy: 0.001)
+      XCTAssertEqual(Double(spectrum.peaks[0]), meter.leftPeakDB, accuracy: 0.001)
+    }
     for _ in 0..<100 { fast.update(silence, elapsed: 1.0 / 30) }
     XCTAssertEqual(fast.levels[0], -90)
   }
 
-  func testCaptureIsBeforeEQAndReaderOutlivesDSP() {
+  func testPairedCaptureIncludesPreampEQAndLimiterAndOutlivesDSP() {
+    for gain in [-24.0, 0] {
+      let dsp = meq_create()!
+      var bands = EQPreset.flat.bands.map(\.native)
+      bands[0] = MEQBand(type: 0, enabled: true, frequency: 996.09375, gain: 12, width: 1)
+      XCTAssertTrue(meq_prepare(dsp, 48000, bands, 8, gain))
+      let reader = meq_spectrum_reader_create(dsp)!
+      defer { meq_spectrum_reader_destroy(reader) }
+      let format = meq_spectrum_format(reader)
+      meq_spectrum_set_enabled(reader, true)
+      // Prime lookahead and history, then request a steady-state window.
+      var samples = [Float](repeating: 0, count: Int(format.frames) * 2)
+      for i in 0..<Int(format.frames) {
+        let value = Float(0.5 * sin(2 * .pi * 170 * Double(i) / Double(format.frames)))
+        samples[2 * i] = value
+        samples[2 * i + 1] = -value
+      }
+      var processed = samples
+      meq_process(dsp, &processed, format.frames)
+      meq_spectrum_request(reader)
+      processed = samples
+      meq_process(dsp, &processed, format.frames)
+      meq_destroy(dsp)
+      let output = SpectrumAnalyzer(sampleRate: 48000, frames: Int(format.frames))!
+      let source = SpectrumAnalyzer(sampleRate: 48000, frames: Int(format.frames))!
+      var info = MEQSpectrumSnapshot()
+      XCTAssertTrue(
+        meq_spectrum_take_pair(reader, output.samples, source.samples, format.frames, &info))
+      XCTAssertEqual(
+        Array(UnsafeBufferPointer(start: output.samples, count: processed.count)), processed)
+      // Ghost shares lookahead delay but excludes EQ and peak protection.
+      for i in 0..<Int(format.frames) {
+        let original = (i - 48 + Int(format.frames)) % Int(format.frames)
+        XCTAssertEqual(
+          source.samples[2 * i], samples[2 * original] * Float(pow(10, gain / 20)),
+          accuracy: 0.000001)
+        XCTAssertEqual(source.samples[2 * i + 1], -source.samples[2 * i])
+      }
+      XCTAssertEqual(source.analyze().max()!, Float(-6.0206 + gain), accuracy: 0.04)
+      let outputPeak = output.analyze().max()!
+      if gain == -24 {
+        XCTAssertEqual(outputPeak, -18.0206, accuracy: 0.05)
+      } else {
+        XCTAssertLessThan(
+          outputPeak, -0.4, "Primary spectrum must include actual limiter attenuation")
+        XCTAssertGreaterThan(outputPeak, -1)
+      }
+    }
+  }
+
+  func testPairedSourceTracksPreampCrossfadeAndSmallBlocksAcrossVisibilityEpochs() {
     let dsp = meq_create()!
     let bands = EQPreset.flat.bands.map(\.native)
-    XCTAssertTrue(meq_prepare(dsp, 48000, bands, 8, -24))
+    XCTAssertTrue(meq_prepare(dsp, 192000, bands, 8, -12))
     let reader = meq_spectrum_reader_create(dsp)!
-    defer { meq_spectrum_reader_destroy(reader) }
-    let format = meq_spectrum_format(reader)
-    meq_spectrum_set_enabled(reader, true)
-    meq_spectrum_request(reader)
-    var samples = [Float](repeating: 0.5, count: Int(format.frames) * 2)
-    meq_process(dsp, &samples, format.frames)
-    XCTAssertLessThan(samples.last!, 0.04)
-    meq_destroy(dsp)
+    defer {
+      meq_spectrum_reader_destroy(reader)
+      meq_destroy(dsp)
+    }
+    let frames = Int(meq_spectrum_format(reader).frames)
+    var output = [Float](repeating: 0, count: frames * 2)
+    var source = output
     var info = MEQSpectrumSnapshot()
-    XCTAssertTrue(meq_spectrum_take(reader, &samples, format.frames, &info))
-    XCTAssertTrue(samples.allSatisfy { $0 == 0.5 })
+    for epoch in 0..<2 {
+      meq_spectrum_set_enabled(reader, false)
+      var hidden = [Float](repeating: -0.5, count: 1024)
+      meq_process(dsp, &hidden, 512)
+      meq_spectrum_set_enabled(reader, true)
+      meq_spectrum_request(reader)
+      // Start with single-frame blocks shorter than the 192-frame lookahead.
+      var received = false
+      var position = 0
+      while position < frames + 1024 {
+        let count = position < 256 ? 1 : 127
+        if position == 64 { XCTAssertTrue(meq_submit(dsp, bands, 8, epoch == 0 ? -6 : -18)) }
+        var samples = [Float](repeating: epoch == 0 ? 0.1 : 0.2, count: count * 2)
+        meq_process(dsp, &samples, UInt32(count))
+        position += count
+        if meq_spectrum_take_pair(reader, &output, &source, UInt32(frames), &info) {
+          received = true
+          let maximumDifference = zip(output, source).map { abs($0 - $1) }.max()!
+          XCTAssertLessThan(
+            maximumDifference, 0.0000001,
+            "Flat EQ and ghost must match through a preamp crossfade within Float rounding")
+          XCTAssertTrue(
+            source.allSatisfy { $0 > 0 }, "No stale hidden samples may enter the fresh pair")
+        }
+      }
+      XCTAssertTrue(received)
+    }
   }
 
   func testCaptureAndSnapshotPressureNeverChangeAudio() {
@@ -149,6 +234,8 @@ final class SpectrumTests: XCTestCase {
     XCTAssertEqual(meq_spectrum_stats(reader).capturedBlocks, 0)
     monitor.configure(visible: true)
     worker.sync {}  // Analyzer prepared and first snapshot requested.
+    samples = .init(repeating: 0.2, count: 16384)
+    meq_process(dsp, &samples, 8192)
     samples = .init(repeating: 0.2, count: 16384)
     meq_process(dsp, &samples, 8192)
     let frame = expectation(description: "Visible spectrum arrives")

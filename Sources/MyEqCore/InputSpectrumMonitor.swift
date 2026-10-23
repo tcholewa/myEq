@@ -30,6 +30,8 @@ final class InputSpectrumMonitor {
   private var workerSource: SpectrumSource?
   private var workerGeneration: UInt64 = 0
   private var analyzer: SpectrumAnalyzer?
+  private var sourceAnalyzer: SpectrumAnalyzer?
+  private var sourceEnvelope = SpectrumEnvelope()
   private var envelope = SpectrumEnvelope()
   private var lastTimestamp: TimeInterval?
 
@@ -99,6 +101,8 @@ final class InputSpectrumMonitor {
       self.workerSource = visible ? source : nil
       self.workerGeneration = token
       self.envelope = SpectrumEnvelope()
+      self.sourceEnvelope = SpectrumEnvelope()
+      self.sourceAnalyzer = nil
       self.lastTimestamp = nil
       self.analyzer = nil
       self.enqueue(nil, generation: token)
@@ -108,6 +112,8 @@ final class InputSpectrumMonitor {
       else { return }
       guard self.isCurrent(token) else { return }
       self.analyzer = analyzer
+      self.sourceAnalyzer = SpectrumAnalyzer(
+        sampleRate: source.format.sampleRate, frames: Int(source.format.frames))
       meq_spectrum_request(source.reader)
       let period = reduced ? 100_000_000 : 33_333_333
       self.timer.schedule(
@@ -124,19 +130,26 @@ final class InputSpectrumMonitor {
 
   private func poll() {
     let token = workerGeneration
-    guard isCurrent(token), let source = workerSource, let analyzer else { return }
+    guard isCurrent(token), let source = workerSource, let analyzer, let sourceAnalyzer else {
+      return
+    }
     var info = MEQSpectrumSnapshot()
-    if meq_spectrum_take(source.reader, analyzer.samples, UInt32(analyzer.frames), &info) {
+    if meq_spectrum_take_pair(
+      source.reader, analyzer.samples, sourceAnalyzer.samples, UInt32(analyzer.frames), &info)
+    {
       let age = Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) &- info.capturedNS) / 1e9
       if age < 0.25 {
         let timestamp = ProcessInfo.processInfo.systemUptime - age
         let values = analyzer.analyze()
-        envelope.update(values, elapsed: lastTimestamp.map { timestamp - $0 } ?? 1.0 / 30)
+        let elapsed = lastTimestamp.map { timestamp - $0 } ?? 1.0 / 30
+        envelope.update(values, elapsed: elapsed)
+        sourceEnvelope.update(sourceAnalyzer.analyze(), elapsed: elapsed)
         lastTimestamp = timestamp
         enqueue(
           SpectrumFrame(
             levels: envelope.levels, sampleRate: info.sampleRate, timestamp: timestamp,
-            sequence: info.sequence), generation: token)
+            sequence: info.sequence, sourceLevels: sourceEnvelope.levels, peaks: envelope.peaks),
+          generation: token)
       }
     }
     if isCurrent(token) { meq_spectrum_request(source.reader) }

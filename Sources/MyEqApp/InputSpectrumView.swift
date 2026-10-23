@@ -33,6 +33,7 @@ final class SpectrumLayerView: NSView {
   private let fill = CALayer()
   private let barMask = CAShapeLayer()
   private let tips = CAShapeLayer()
+  private let ghost = CAShapeLayer()
   private var current: SpectrumFrame?
   private var geometryDirty = false
   private var subscription: AnyCancellable?
@@ -43,8 +44,10 @@ final class SpectrumLayerView: NSView {
   private var lastPlotSize = CGSize.zero
   private var lastScale: CGFloat = 0
   private var displayedRows: [Int] = []
+  private var displayedGhostRows: [Int] = []
+  private var displayedPeaks: [CGFloat] = []
   private let step: CGFloat = 4
-  private let segmentHeight: CGFloat = 2.25
+  private let segmentHeight: CGFloat = 1.75
 
   override var isFlipped: Bool { true }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -57,8 +60,12 @@ final class SpectrumLayerView: NSView {
     layer?.addSublayer(plotLayer)
     fill.contentsGravity = .resize
     fill.mask = barMask
+    ghost.fillColor = NSColor.white.withAlphaComponent(0.018).cgColor
+    ghost.strokeColor = NSColor(red: 0.65, green: 0.69, blue: 0.72, alpha: 0.15).cgColor
+    ghost.lineWidth = 0.65
+    plotLayer.addSublayer(ghost)
     plotLayer.addSublayer(fill)
-    tips.fillColor = NSColor(red: 0.70, green: 0.81, blue: 0.71, alpha: 0.30).cgColor
+    tips.fillColor = NSColor(red: 0.85, green: 0.90, blue: 0.84, alpha: 0.30).cgColor
     plotLayer.addSublayer(tips)
     setAccessibilityElement(false)
   }
@@ -90,18 +97,25 @@ final class SpectrumLayerView: NSView {
     current = nil
     geometryDirty = false
     displayedRows.removeAll(keepingCapacity: true)
+    displayedGhostRows.removeAll(keepingCapacity: true)
+    displayedPeaks.removeAll(keepingCapacity: true)
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     barMask.path = nil
     tips.path = nil
+    ghost.path = nil
     CATransaction.commit()
   }
 
   private func receive(_ frame: SpectrumFrame?) {
     guard visible else { return }
     guard let frame, frame.levels.count == SpectrumFrame.pointCount,
+      frame.peaks.count == SpectrumFrame.pointCount,
+      frame.sourceLevels.isEmpty || frame.sourceLevels.count == SpectrumFrame.pointCount,
       frame.timestamp.isFinite,
-      frame.levels.contains(where: { $0.isFinite && $0 > SpectrumFrame.floorDB + 0.05 })
+      [frame.levels, frame.sourceLevels, frame.peaks].contains(where: { values in
+        values.contains { $0.isFinite && $0 > SpectrumFrame.floorDB + 0.05 }
+      })
     else {
       clear()
       return
@@ -141,7 +155,7 @@ final class SpectrumLayerView: NSView {
     context.translateBy(x: 0, y: CGFloat(context.height))
     context.scaleBy(x: scale, y: -scale)
     let spacing = size.width / CGFloat(SpectrumFrame.pointCount - 1)
-    let width = max(0.5, spacing * 0.60)
+    let width = max(0.5, spacing * 0.50)
     let grid = CGMutablePath()
     for index in 0..<SpectrumFrame.pointCount {
       for row in 0..<max(1, Int(size.height * 0.75 / step)) {
@@ -157,10 +171,10 @@ final class SpectrumLayerView: NSView {
     context.clip()
     // Keep the approved subdued palette independent of bar height.
     let colors = [
-      NSColor(red: 0.76, green: 0.85, blue: 0.76, alpha: 0.54).cgColor,
-      NSColor(red: 0.55, green: 0.71, blue: 0.59, alpha: 0.44).cgColor,
-      NSColor(red: 0.31, green: 0.49, blue: 0.40, alpha: 0.30).cgColor,
-      NSColor(red: 0.13, green: 0.24, blue: 0.20, alpha: 0.18).cgColor,
+      NSColor(red: 0.76, green: 0.85, blue: 0.76, alpha: 0.44).cgColor,
+      NSColor(red: 0.55, green: 0.71, blue: 0.59, alpha: 0.34).cgColor,
+      NSColor(red: 0.31, green: 0.49, blue: 0.40, alpha: 0.22).cgColor,
+      NSColor(red: 0.13, green: 0.24, blue: 0.20, alpha: 0.12).cgColor,
     ]
     if let gradient = CGGradient(
       colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -178,29 +192,60 @@ final class SpectrumLayerView: NSView {
     let size = plotLayer.bounds.size
     guard size.width > 0, size.height > 0 else { return }
     let rows = max(1, Int(size.height * 0.75 / step))
-    let nextRows = frame.levels.map { db -> Int in
-      let level =
-        db.isFinite
+    func normalized(_ db: Float) -> CGFloat {
+      db.isFinite
         ? CGFloat(max(0, min(1, (db - SpectrumFrame.floorDB) / -SpectrumFrame.floorDB))) : 0
-      return min(rows, Int(ceil(level * CGFloat(rows))))
     }
-    // Smoothed values often move within the same LED row. Leave the layers untouched.
-    guard nextRows != displayedRows else { return }
-    displayedRows = nextRows
-    let bars = CGMutablePath()
-    let caps = CGMutablePath()
+    func rowCounts(_ values: [Float]) -> [Int] {
+      values.map { min(rows, Int(ceil(normalized($0) * CGFloat(rows)))) }
+    }
+    let nextRows = rowCounts(frame.levels)
     let spacing = size.width / CGFloat(SpectrumFrame.pointCount - 1)
-    let width = max(0.5, spacing * 0.60)
-    for (index, count) in nextRows.enumerated() where count > 0 {
-      let x = CGFloat(index) * spacing - width / 2
-      let height = CGFloat(count - 1) * step + segmentHeight
-      bars.addRect(CGRect(x: x, y: size.height - height, width: width, height: height))
-      caps.addRoundedRect(
-        in: CGRect(x: x, y: size.height - height, width: width, height: segmentHeight),
-        cornerWidth: 0.55, cornerHeight: 0.55)
+    let width = max(0.5, spacing * 0.50)
+    if nextRows != displayedRows {
+      displayedRows = nextRows
+      let bars = CGMutablePath()
+      for (index, count) in nextRows.enumerated() where count > 0 {
+        let height = CGFloat(count - 1) * step + segmentHeight
+        bars.addRect(
+          CGRect(
+            x: CGFloat(index) * spacing - width / 2,
+            y: size.height - height, width: width, height: height))
+      }
+      barMask.path = bars
     }
-    barMask.path = bars
-    tips.path = caps
+    let nextGhost = rowCounts(frame.sourceLevels)
+    if nextGhost != displayedGhostRows {
+      displayedGhostRows = nextGhost
+      let outlines = CGMutablePath()
+      let ghostWidth = spacing * 0.60 + 3
+      for (index, count) in nextGhost.enumerated() where count > 0 {
+        let height = CGFloat(count - 1) * step + 2.25
+        outlines.addRoundedRect(
+          in: CGRect(
+            x: CGFloat(index) * spacing - ghostWidth / 2,
+            y: size.height - height, width: ghostWidth, height: height), cornerWidth: 1,
+          cornerHeight: 1)
+      }
+      ghost.path = outlines
+    }
+    // Snap peak positions to backing pixels, independently of the LED row mask.
+    let scale = max(1, lastScale)
+    let nextPeaks = frame.peaks.map { db -> CGFloat in
+      db.isFinite && db > SpectrumFrame.floorDB
+        ? ((size.height - normalized(db) * size.height * 0.75) * scale).rounded() / scale : -1
+    }
+    if nextPeaks != displayedPeaks {
+      displayedPeaks = nextPeaks
+      let caps = CGMutablePath()
+      for (index, y) in nextPeaks.enumerated() where y >= 0 {
+        caps.addRoundedRect(
+          in: CGRect(
+            x: CGFloat(index) * spacing - width / 2,
+            y: y, width: width, height: 1), cornerWidth: 0.5, cornerHeight: 0.5)
+      }
+      tips.path = caps
+    }
   }
 
   private func drawFrame(at now: TimeInterval) {
@@ -213,6 +258,7 @@ final class SpectrumLayerView: NSView {
     let opacity = Float(exp(-max(0, now - current.timestamp - 0.15) / 0.28))
     fill.opacity = opacity
     tips.opacity = opacity
+    ghost.opacity = opacity
     if geometryDirty {
       updateGeometry(current)
       geometryDirty = false
@@ -229,15 +275,18 @@ final class SpectrumLayerView: NSView {
     fill.frame = plotLayer.bounds
     barMask.frame = plotLayer.bounds
     tips.frame = plotLayer.bounds
+    ghost.frame = plotLayer.bounds
     let scale = window?.backingScaleFactor ?? 2
     if plotLayer.bounds.size != lastPlotSize || scale != lastScale {
       lastPlotSize = plotLayer.bounds.size
       lastScale = scale
       rebuildTexture(scale: scale)
       displayedRows.removeAll(keepingCapacity: true)
+      displayedGhostRows.removeAll(keepingCapacity: true)
+      displayedPeaks.removeAll(keepingCapacity: true)
       geometryDirty = true
     }
-    for child in [fill, barMask, tips] { child.contentsScale = scale }
+    for child in [fill, barMask, tips, ghost] { child.contentsScale = scale }
     CATransaction.commit()
     drawFrame(at: ProcessInfo.processInfo.systemUptime)
   }
