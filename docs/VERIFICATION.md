@@ -569,7 +569,7 @@ The separate synthetic capture/FFT/DSP/drawing benchmark used eight seconds per 
 
 The visible-minus-off increment falls from 2.34 to 1.05 percentage points (55.2% lower). Both runs delivered 240 normal-cadence and 80 reduced-motion frames, dropped no snapshots, and captured/delivered no frames in off/hidden states. Local raw results are `build/spectrum-render-comparison.jsonl`, `build/spectrum-pipeline-baseline.log`, and `build/spectrum-pipeline-candidate.jsonl`.
 
-These measurements do not include hardware audio, visible-window compositor/GPU cost, or resize-time texture creation. They do not establish a fix for the installed 0.5.2 underruns. No new package was built, pushed, or installed for this source optimization.
+These measurements do not include hardware audio, visible-window compositor/GPU cost, or resize-time texture creation. They do not establish a fix for the installed 0.5.2 underruns. At this source-optimization stage, no new package had been built, pushed, or installed; 0.5.3 release and installation results follow below.
 
 ## 0.5.3 release verification
 
@@ -578,3 +578,11 @@ On 2026-10-24, the user authorized documenting, committing, pushing, and install
 `bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, trust identities, recovery launch constraints, version consistency, icon, notices, and installer-script checks. Repository/documentation and whitespace checks pass.
 
 Package: `dist/myEq.pkg`, SHA-256 `0fcd2c24d7ecf90f157956defde5b3d46a3d4c5556c506e7d4cb79534147f708`. This development package remains ad-hoc signed and unnotarized. Installation and hardware playback results are recorded separately; the offscreen CPU improvement is not a claim that transport underruns are fixed.
+
+## 0.5.3 installed upgrade verification
+
+On 2026-10-24, the user authorized documentation, commits, push, and installation. The verified package upgraded installed 0.5.2 successfully. Neither myEq nor Music was running at upgrade start. The receipt reports 0.5.3, the app reports build 18, its executable matches the release candidate, and all five installed component signatures match the installed trust manifest. The implementation and release documentation were committed and pushed to `origin/master`.
+
+Before reopening the app, Core Audio device enumeration showed that the virtual output had been unloaded during driver replacement. An administrator-authorized Core Audio reload restored it, then the installed app was opened. One bounded readiness retry was followed by **Equalizing** at 48 kHz with 512-frame physical/virtual buffers and a 1024-frame reserve. No helper-registration repair or Mac restart was needed.
+
+The installed bridge authenticated and rejected wrong-protocol/unauthorized-role requests. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual output. Initial post-startup diagnostics reported zero underruns and overruns, with three source discontinuities. This short startup/client check does not establish sustained audible playback or prove that the earlier 0.5.2 underruns are fixed. Visible-window GPU and whole-app performance remain separate from the offscreen rendering benchmarks.
