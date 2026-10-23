@@ -1,6 +1,6 @@
 # Output spectrum and falling peaks — design proposal
 
-Status: approved and implemented for 0.5.4/build 19. Images below retain the synthetic design proposal; the live implementation and verification are described in [architecture](ARCHITECTURE.md#output-spectrum-and-source-ghost-054) and [verification](VERIFICATION.md#054-output-spectrum-and-source-ghost).
+Status: historical proposal, superseded by the user's request to remove the source ghost and outlines. The current implementation displays processed output only; see [architecture](ARCHITECTURE.md#output-spectrum) and [verification](VERIFICATION.md#processed-output-only-spectrum). The images below preserve the earlier design review.
 
 ## Proposed presentation
 
@@ -26,4 +26,4 @@ The preview uses a deterministic synthetic spectral shape, adds the displayed pr
 
 The proposal lives entirely in the design-rendering scripts. It decorates offscreen editor views and does not change production rendering, capture, FFT analysis, saved preferences, or the installed app. The animation prioritizes reproducible design review, not runtime performance measurement.
 
-The production implementation captures actual post-processing samples and a time-aligned source-plus-preamp stream. It retains cached 64-band rendering, visibility gating, Reduce Motion behavior, and bounded capture. The default display includes the approved ghost; the output-only image above remains a design comparison, not a separate user preference.
+The source ghost shipped in 0.5.4, then was removed at the user's request because it added outlines without a useful visual distinction. Current source retains only actual post-processing output, cached 64-band rendering, held peaks, visibility gating, and Reduce Motion. The proposal renderer remains an archived design comparison; normal editor previews render the current output-only implementation.

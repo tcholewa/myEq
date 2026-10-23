@@ -64,7 +64,7 @@ static void concurrentTests() {
       for(uint32_t i=0;i<block;i++) {input[i*2]=float(position+i);input[i*2+1]=-input[i*2];}
       position+=block;
       if(capture.beginBlock()) {
-        for(uint32_t i=0;i<block;i++)capture.append(input[i*2],input[i*2+1],input[i*2]*2,input[i*2+1]*3);
+        for(uint32_t i=0;i<block;i++)capture.append(input[i*2],input[i*2+1]);
         capture.endBlock();
       }
       if(k%32==0)std::this_thread::yield();
@@ -78,16 +78,15 @@ static void concurrentTests() {
       capture.enable(false);std::this_thread::yield();
     }
   });
-  std::vector<float> output(capture.frames*2), source(capture.frames*2);MEQSpectrumSnapshot info{};
+  std::vector<float> output(capture.frames*2);MEQSpectrumSnapshot info{};
   uint64_t sequence=0;
   do {
     capture.request();
-    if(capture.take(output.data(),capture.frames,info,source.data())){
+    if(capture.take(output.data(),capture.frames,info)){
       assert(info.sequence>sequence);sequence=info.sequence;
       received.store(true,std::memory_order_release);
       for(uint32_t i=0;i<capture.frames;i++) {
         assert(output[i*2+1]==-output[i*2]);
-        assert(source[i*2]==output[i*2]*2 && source[i*2+1]==output[i*2+1]*3);
         if(i)assert(output[i*2]==output[(i-1)*2]+1);
       }
     }

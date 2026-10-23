@@ -92,7 +92,7 @@ final class SpectrumTests: XCTestCase {
     XCTAssertEqual(fast.levels[0], -90)
   }
 
-  func testPairedCaptureIncludesPreampEQAndLimiterAndOutlivesDSP() {
+  func testOutputCaptureIncludesPreampEQAndLimiterAndOutlivesDSP() {
     for gain in [-24.0, 0] {
       let dsp = meq_create()!
       var bands = EQPreset.flat.bands.map(\.native)
@@ -116,21 +116,11 @@ final class SpectrumTests: XCTestCase {
       meq_process(dsp, &processed, format.frames)
       meq_destroy(dsp)
       let output = SpectrumAnalyzer(sampleRate: 48000, frames: Int(format.frames))!
-      let source = SpectrumAnalyzer(sampleRate: 48000, frames: Int(format.frames))!
       var info = MEQSpectrumSnapshot()
       XCTAssertTrue(
-        meq_spectrum_take_pair(reader, output.samples, source.samples, format.frames, &info))
+        meq_spectrum_take(reader, output.samples, format.frames, &info))
       XCTAssertEqual(
         Array(UnsafeBufferPointer(start: output.samples, count: processed.count)), processed)
-      // Ghost shares lookahead delay but excludes EQ and peak protection.
-      for i in 0..<Int(format.frames) {
-        let original = (i - 48 + Int(format.frames)) % Int(format.frames)
-        XCTAssertEqual(
-          source.samples[2 * i], samples[2 * original] * Float(pow(10, gain / 20)),
-          accuracy: 0.000001)
-        XCTAssertEqual(source.samples[2 * i + 1], -source.samples[2 * i])
-      }
-      XCTAssertEqual(source.analyze().max()!, Float(-6.0206 + gain), accuracy: 0.04)
       let outputPeak = output.analyze().max()!
       if gain == -24 {
         XCTAssertEqual(outputPeak, -18.0206, accuracy: 0.05)
@@ -142,7 +132,7 @@ final class SpectrumTests: XCTestCase {
     }
   }
 
-  func testPairedSourceTracksPreampCrossfadeAndSmallBlocksAcrossVisibilityEpochs() {
+  func testOutputCaptureTracksRenderedSamplesAcrossSmallBlocksAndVisibilityEpochs() {
     let dsp = meq_create()!
     let bands = EQPreset.flat.bands.map(\.native)
     XCTAssertTrue(meq_prepare(dsp, 192000, bands, 8, -12))
@@ -153,7 +143,6 @@ final class SpectrumTests: XCTestCase {
     }
     let frames = Int(meq_spectrum_format(reader).frames)
     var output = [Float](repeating: 0, count: frames * 2)
-    var source = output
     var info = MEQSpectrumSnapshot()
     for epoch in 0..<2 {
       meq_spectrum_set_enabled(reader, false)
@@ -163,6 +152,7 @@ final class SpectrumTests: XCTestCase {
       meq_spectrum_request(reader)
       // Start with single-frame blocks shorter than the 192-frame lookahead.
       var received = false
+      var rendered: [Float] = []
       var position = 0
       while position < frames + 1024 {
         let count = position < 256 ? 1 : 127
@@ -170,14 +160,12 @@ final class SpectrumTests: XCTestCase {
         var samples = [Float](repeating: epoch == 0 ? 0.1 : 0.2, count: count * 2)
         meq_process(dsp, &samples, UInt32(count))
         position += count
-        if meq_spectrum_take_pair(reader, &output, &source, UInt32(frames), &info) {
+        rendered.append(contentsOf: samples)
+        if meq_spectrum_take(reader, &output, UInt32(frames), &info) {
           received = true
-          let maximumDifference = zip(output, source).map { abs($0 - $1) }.max()!
-          XCTAssertLessThan(
-            maximumDifference, 0.0000001,
-            "Flat EQ and ghost must match through a preamp crossfade within Float rounding")
-          XCTAssertTrue(
-            source.allSatisfy { $0 > 0 }, "No stale hidden samples may enter the fresh pair")
+          XCTAssertEqual(
+            output, Array(rendered.suffix(frames * 2)),
+            "Every captured sample must match the actual output in this visibility epoch")
         }
       }
       XCTAssertTrue(received)

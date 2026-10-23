@@ -17,14 +17,14 @@ struct SpectrumCapture {
   struct Slot {
     std::atomic<uint32_t> state{Free};
     MEQSpectrumSnapshot info{};
-    std::array<float,spectrumMaximumFrames*2> samples{}, source{};
+    std::array<float,spectrumMaximumFrames*2> samples{};
   };
   const double rate;
   const uint32_t frames;
   std::atomic<uint64_t> epoch{0},requested{0};
   std::atomic<uint64_t> blocks{0},published{0},dropped{0};
   std::array<Slot,3> slots;
-  std::array<float,spectrumMaximumFrames*2> history{}, sourceHistory{};
+  std::array<float,spectrumMaximumFrames*2> history{};
   uint64_t producerEpoch=0,sequence=0;
   uint32_t cursor=0,filled=0;
   explicit SpectrumCapture(double sampleRate):rate(sampleRate),frames(uint32_t(1u<<std::clamp(int(std::round(std::log2(sampleRate*.171))),12,15))){}
@@ -40,15 +40,14 @@ struct SpectrumCapture {
     blocks.fetch_add(1,std::memory_order_relaxed);
     return true;
   }
-  void append(float left,float right,float sourceLeft,float sourceRight){
+  void append(float left,float right){
     history[cursor*2]=left;history[cursor*2+1]=right;
-    sourceHistory[cursor*2]=sourceLeft;sourceHistory[cursor*2+1]=sourceRight;
     if(++cursor==frames)cursor=0;filled=std::min(frames,filled+1);
   }
-  // Compatibility helper for native capture-state tests; both streams are identical.
+  // Block helper for native capture-state tests.
   void capture(const float *input,uint32_t count){
     if(!count||!beginBlock())return;
-    for(uint32_t i=0;i<count;i++)append(input[i*2],input[i*2+1],input[i*2],input[i*2+1]);
+    for(uint32_t i=0;i<count;i++)append(input[i*2],input[i*2+1]);
     endBlock();
   }
   void endBlock(){
@@ -60,14 +59,12 @@ struct SpectrumCapture {
       const auto first=frames-cursor;
       std::memcpy(slot.samples.data(),history.data()+cursor*2,first*2*sizeof(float));
       if(cursor)std::memcpy(slot.samples.data()+first*2,history.data(),cursor*2*sizeof(float));
-      std::memcpy(slot.source.data(),sourceHistory.data()+cursor*2,first*2*sizeof(float));
-      if(cursor)std::memcpy(slot.source.data()+first*2,sourceHistory.data(),cursor*2*sizeof(float));
       slot.info={frames,rate,e,++sequence,clock_gettime_nsec_np(CLOCK_UPTIME_RAW)};
       slot.state.store(Ready,std::memory_order_release);published.fetch_add(1,std::memory_order_relaxed);return;
     }
     dropped.fetch_add(1,std::memory_order_relaxed);
   }
-  bool take(float *output,uint32_t capacity,MEQSpectrumSnapshot &info,float *source=nullptr){
+  bool take(float *output,uint32_t capacity,MEQSpectrumSnapshot &info){
     const auto e=epoch.load(std::memory_order_acquire);
     int newest=-1;
     for(int i=0;i<3;i++){
@@ -81,7 +78,6 @@ struct SpectrumCapture {
     uint32_t expected=Ready;
     if(!slot.state.compare_exchange_strong(expected,Reading,std::memory_order_acquire))return false;
     info=slot.info;std::memcpy(output,slot.samples.data(),info.frames*2*sizeof(float));
-    if(source)std::memcpy(source,slot.source.data(),info.frames*2*sizeof(float));
     slot.state.store(Free,std::memory_order_release);
     return epoch.load(std::memory_order_acquire)==info.epoch;
   }

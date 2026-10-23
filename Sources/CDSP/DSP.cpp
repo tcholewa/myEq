@@ -90,10 +90,10 @@ struct MEQDSP {
     Bank current,old;
     std::array<Config,queueSize> queue;
     std::atomic<unsigned> read{0},write{0};
-    uint32_t spectrumWarmup=0,fadeRemaining=0,fadeLength=960,delay=48;
-    uint64_t sequence=0,spectrumEpoch=0;
+    uint32_t fadeRemaining=0,fadeLength=960,delay=48;
+    uint64_t sequence=0;
     size_t head=0,tail=0;
-    std::vector<std::array<double,2>> delayLine, sourceDelay;
+    std::vector<std::array<double,2>> delayLine;
     std::vector<double> maxima;
     std::vector<uint64_t> positions;
     MEQChannel inL{},inR{},outL{},outR{};
@@ -122,20 +122,8 @@ struct MEQDSP {
         float peakLeft=0,peakRight=0;double minGain=1;
         for(uint32_t i=0;i<n;++i) {
             double l=source(0,i),r=source(1,i);
-            std::array<double,2> ghost{};
-            if constexpr(Spectrum) {
-                // Match the processing gain transition, then align source with limiter lookahead.
-                const double t=fadeRemaining ? 1-double(fadeRemaining)/fadeLength : 1;
-                const double gain=old.config.gain*(1-t)+current.config.gain*t;
-                const size_t slot=sequence%sourceDelay.size();
-                ghost=sourceDelay[slot];
-                sourceDelay[slot]=(std::isfinite(l)&&std::isfinite(r)) ? std::array<double,2>{l*gain,r*gain} : std::array<double,2>{0,0};
-            }
             frame(l,r);dest(0,i,l);dest(1,i,r);
-            if constexpr(Spectrum) {
-                if(spectrumWarmup) --spectrumWarmup;
-                else spectrum->append(float(l),float(r),float(ghost[0]),float(ghost[1]));
-            }
+            if constexpr(Spectrum) spectrum->append(float(l),float(r));
             if constexpr(Metering) {
                 peakLeft=std::max(peakLeft,float(std::abs(l)));
                 peakRight=std::max(peakRight,float(std::abs(r)));
@@ -163,8 +151,6 @@ struct MEQDSP {
         }
         const bool capture=n && spectrum->beginBlock();
         if(capture) {
-            // Refill the source delay before admitting samples from a new visibility epoch.
-            if(spectrumEpoch!=spectrum->producerEpoch){spectrumEpoch=spectrum->producerEpoch;spectrumWarmup=delay;}
             if(epoch&1) render<true,true>(n,source,dest,epoch);
             else render<false,true>(n,source,dest,epoch);
             spectrum->endBlock();
@@ -224,8 +210,8 @@ bool meq_prepare(MEQDSP *d,double fs,const MEQBand *b,int n,double gain) {
     d->rate=fs;d->current=Bank{};d->current.config=config(b,n,gain,fs);d->old=d->current;
     d->read=0;d->write=0;d->fadeRemaining=0;d->fadeLength=uint32_t(fs*.02);
     d->delay=uint32_t(ceil(fs*.001));d->release=exp(-1/(fs*.05));d->limiterGain=1;
-    d->sourceDelay.assign(d->delay,{0,0});d->delayLine.assign(d->delay,{0,0});d->maxima.assign(d->delay+2,0);d->positions.assign(d->delay+2,0);
-    d->spectrumEpoch=0;d->sequence=0;d->head=d->tail=0;d->peaks=0;d->reduction=0;d->publishedMeterEpoch=0;d->callbackMeterEpoch=0;d->callbacks=0;d->faults=0;return true;
+    d->delayLine.assign(d->delay,{0,0});d->maxima.assign(d->delay+2,0);d->positions.assign(d->delay+2,0);
+    d->sequence=0;d->head=d->tail=0;d->peaks=0;d->reduction=0;d->publishedMeterEpoch=0;d->callbackMeterEpoch=0;d->callbacks=0;d->faults=0;return true;
 }
 bool meq_submit(MEQDSP *d,const MEQBand *b,int n,double gain) {
     if(!d||!valid(b,n,gain))return false;
@@ -250,7 +236,6 @@ void meq_spectrum_set_enabled(MEQSpectrumReader *r,bool enabled){r->capture->ena
 void meq_spectrum_request(MEQSpectrumReader *r){r->capture->request();}
 MEQSpectrumSnapshot meq_spectrum_format(MEQSpectrumReader *r){return {r->capture->frames,r->capture->rate,0,0,0};}
 bool meq_spectrum_take(MEQSpectrumReader *r,float *stereo,uint32_t frames,MEQSpectrumSnapshot *info){return r->capture->take(stereo,frames,*info);}
-bool meq_spectrum_take_pair(MEQSpectrumReader *r,float *output,float *source,uint32_t frames,MEQSpectrumSnapshot *info){return r->capture->take(output,frames,*info,source);}
 MEQSpectrumStats meq_spectrum_stats(MEQSpectrumReader *r){auto &c=*r->capture;return {c.blocks.load(std::memory_order_relaxed),c.published.load(std::memory_order_relaxed),c.dropped.load(std::memory_order_relaxed)};}
 double meq_response(const MEQBand*b,int n,double f,double fs) {
     if(!valid(b,n,0)||!std::isfinite(f)||!std::isfinite(fs)||fs<32000)return 0;

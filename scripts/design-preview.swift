@@ -258,12 +258,7 @@ struct DesignPreview {
     model.update(
       SpectrumFrame(
         levels: values, sampleRate: 48000, timestamp: ProcessInfo.processInfo.systemUptime,
-        sourceLevels: values.enumerated().map { index, value in
-          value
-            - Float(
-              EQResponse.gain(
-                EQPreset.botaniq.bands, at: 20 * pow(1000, Double(index) / 63), sampleRate: 48000))
-        }, peaks: values.map { min(0, $0 + 10) }))
+        peaks: values.map { min(0, $0 + 10) }))
     RunLoop.main.run(until: Date().addingTimeInterval(0.04))
     CATransaction.flush()
   }
@@ -276,10 +271,9 @@ struct DesignPreview {
     view.bind(model, visible: true, reducedMotion: false)
     view.layoutSubtreeIfNeeded()
     let plot = view.layer!.sublayers!.first!
-    let fill = plot.sublayers![1]
+    let fill = plot.sublayers!.first!
     let mask = fill.mask as! CAShapeLayer
     let tips = plot.sublayers!.last as! CAShapeLayer
-    let ghost = plot.sublayers!.first as! CAShapeLayer
     func send(_ levels: [Float], age: Double = 0, rate: Double = 48000) {
       model.update(
         SpectrumFrame(
@@ -311,7 +305,7 @@ struct DesignPreview {
     spectrumFixture(model)
     precondition(plot.frame == CGRect(x: 34, y: 12, width: 954, height: 160))
     precondition(columns().count == SpectrumFrame.pointCount && mask.path != nil)
-    precondition(ghost.path != nil)
+    precondition(plot.sublayers!.count == 2)  // Filled output and peak markers; no outline layer.
     let texture = fill.contents! as AnyObject
     var rectangles = 0
     mask.path!.applyWithBlock { if $0.pointee.type == .closeSubpath { rectangles += 1 } }
@@ -320,7 +314,7 @@ struct DesignPreview {
     RunLoop.main.run(until: Date().addingTimeInterval(0.25))
     precondition(fill.opacity < oldOpacity)
     RunLoop.main.run(until: Date().addingTimeInterval(1.1))
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
 
     var levels = [Float](repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount)
     levels[0] = -45
@@ -348,18 +342,18 @@ struct DesignPreview {
     precondition(columns().count == SpectrumFrame.pointCount)
     view.bind(model, visible: false, reducedMotion: false)
     spectrumFixture(model)
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     view.bind(model, visible: true, reducedMotion: false)
     send(levels, age: 2, rate: 32000)
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     send([Float](repeating: .nan, count: SpectrumFrame.pointCount))
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     send(levels)
     send([Float](repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount))
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     send(levels)
     send([0])
-    precondition(mask.path == nil && tips.path == nil && ghost.path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     view.disconnect()
     print(
       "PASS: 64 LED columns, cached texture/row geometry, sample positions/heights, resize, fade/expiry, Reduce Motion, hide, silence and invalid/stale frames."

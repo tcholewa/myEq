@@ -25,7 +25,7 @@ MEQMeter meq_meter(MEQDSP *_Null_unspecified );
 // Single meter consumer: atomically drain stereo peaks since the previous read.
 // Health/statistics readers use meq_meter instead, which does not drain peaks.
 MEQMeter meq_take_meter(MEQDSP *_Null_unspecified );
-// Output/source visualization. The reader retains storage independently of the stopped/destroyed DSP.
+// Post-processing output visualization. The reader retains storage independently of the stopped/destroyed DSP.
 // One control owner changes enable state; one analysis consumer requests/takes snapshots.
 typedef struct MEQSpectrumReader MEQSpectrumReader;
 typedef struct {uint32_t frames; double sampleRate; uint64_t epoch, sequence, capturedNS;} MEQSpectrumSnapshot;
@@ -36,8 +36,6 @@ void meq_spectrum_set_enabled(MEQSpectrumReader * _Nonnull, bool enabled);
 void meq_spectrum_request(MEQSpectrumReader * _Nonnull);
 MEQSpectrumSnapshot meq_spectrum_format(MEQSpectrumReader * _Nonnull);
 bool meq_spectrum_take(MEQSpectrumReader * _Nonnull, float * _Nonnull stereo, uint32_t capacityFrames, MEQSpectrumSnapshot * _Nonnull);
-// Synchronized actual post-limiter output and latency-aligned source with applied preamp.
-bool meq_spectrum_take_pair(MEQSpectrumReader * _Nonnull, float * _Nonnull output, float * _Nonnull source, uint32_t capacityFrames, MEQSpectrumSnapshot * _Nonnull);
 MEQSpectrumStats meq_spectrum_stats(MEQSpectrumReader * _Nonnull);
 double meq_response(const MEQBand *_Null_unspecified , int count, double frequency, double rate);
 OSStatus meq_audio_callback(AudioObjectID, const AudioTimeStamp * _Nonnull, const AudioBufferList * _Nonnull, const AudioTimeStamp * _Nonnull, AudioBufferList * _Nonnull, const AudioTimeStamp * _Nonnull, void * _Nullable);

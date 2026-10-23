@@ -5,7 +5,6 @@ public struct SpectrumFrame: Equatable {
   public static let pointCount = 64
   public static let floorDB: Float = -90
   public let levels: [Float]
-  public let sourceLevels: [Float]
   public let peaks: [Float]
   public let sampleRate: Double
   public let timestamp: TimeInterval
@@ -14,9 +13,8 @@ public struct SpectrumFrame: Equatable {
 
   public init(
     levels: [Float], sampleRate: Double, timestamp: TimeInterval, sequence: UInt64 = 0,
-    sourceLevels: [Float] = [], peaks: [Float] = []
+    peaks: [Float] = []
   ) {
-    self.sourceLevels = sourceLevels
     self.peaks = peaks.isEmpty ? levels : peaks
     self.levels = levels
     self.sampleRate = sampleRate

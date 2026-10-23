@@ -622,3 +622,14 @@ The verified package successfully upgraded 0.5.3 on 2026-10-24. Neither myEq nor
 Replacing the unchanged driver again unloaded the virtual output. A single administrator-authorized Core Audio reload restored it before reopening the installed app. After one bounded readiness retry, myEq reached **Equalizing** at 48 kHz, with 512-frame physical/virtual buffers and a 1024-frame reserve. No Mac restart or helper-registration repair was required.
 
 Installed IPC checks passed authentication and rejected wrong-protocol/unauthorized-role requests. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual route. Initial transport diagnostics showed zero underruns and overruns, and one source discontinuity. These short silent-client/startup checks do not establish sustained audible playback or visible-window GPU performance. GitHub CI for the implementation was still running at the time these installation results were recorded; local verification is listed above.
+
+
+## Processed-output-only spectrum
+
+On 2026-10-24, the user requested removal of the source ghost and outlines because the two energy displays were not visually useful together. The analyzer now draws only 64 filled processed-output LED bars and their held peak markers. Data still comes from the actual output after preamp, EQ, and peak protection. The palette, segment geometry, falling-bar timing, peak hold, cached texture, and visibility/Reduce Motion behavior remain.
+
+The source layer and its geometry cache, source frame data, second FFT/envelope, source lookahead delay, and paired capture API/storage have been removed. Capture history and snapshots return from about 2 MiB to 1 MiB per DSP instance. This is a removal of unnecessary work; no new CPU benchmark claim is made.
+
+All 48 Swift tests pass, including exact agreement between captured and rendered output through preamp changes, small callbacks, and visibility resets; EQ/limiter measurement and audio-isolation tests also pass. Native audio/concurrency tests, strict Swift formatting, and offscreen UI checks pass. The UI fixture asserts that only the output fill and peak-marker layers exist. Both editor sizes were visually inspected, and the README screenshot now shows the compact output-only editor. Repository/documentation and whitespace checks pass.
+
+This refinement is committed source only; the installed 0.5.4 package and its recorded verification above describe the prior paired-stream release.

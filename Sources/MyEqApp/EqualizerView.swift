@@ -164,7 +164,7 @@ struct EqualizerView: View {
         .accessibilityLabel("Show output spectrum")
         .accessibilityValue(model.spectrumEnabled ? "On" : "Off")
         .help(
-          "Filled bars show output after EQ and peak protection. Faint outlines show source plus preamp. Spectrum levels use a separate scale from EQ gain."
+          "Filled bars show output after EQ and peak protection. Spectrum levels use a separate scale from EQ gain."
         )
         Capsule().fill(Studio.ink).frame(width: 14, height: 2)
         Text("Combined").font(.system(size: 10)).foregroundStyle(Studio.secondary)

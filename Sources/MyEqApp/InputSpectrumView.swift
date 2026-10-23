@@ -33,7 +33,6 @@ final class SpectrumLayerView: NSView {
   private let fill = CALayer()
   private let barMask = CAShapeLayer()
   private let tips = CAShapeLayer()
-  private let ghost = CAShapeLayer()
   private var current: SpectrumFrame?
   private var geometryDirty = false
   private var subscription: AnyCancellable?
@@ -44,7 +43,6 @@ final class SpectrumLayerView: NSView {
   private var lastPlotSize = CGSize.zero
   private var lastScale: CGFloat = 0
   private var displayedRows: [Int] = []
-  private var displayedGhostRows: [Int] = []
   private var displayedPeaks: [CGFloat] = []
   private let step: CGFloat = 4
   private let segmentHeight: CGFloat = 1.75
@@ -60,10 +58,6 @@ final class SpectrumLayerView: NSView {
     layer?.addSublayer(plotLayer)
     fill.contentsGravity = .resize
     fill.mask = barMask
-    ghost.fillColor = NSColor.white.withAlphaComponent(0.018).cgColor
-    ghost.strokeColor = NSColor(red: 0.65, green: 0.69, blue: 0.72, alpha: 0.15).cgColor
-    ghost.lineWidth = 0.65
-    plotLayer.addSublayer(ghost)
     plotLayer.addSublayer(fill)
     tips.fillColor = NSColor(red: 0.85, green: 0.90, blue: 0.84, alpha: 0.30).cgColor
     plotLayer.addSublayer(tips)
@@ -97,13 +91,11 @@ final class SpectrumLayerView: NSView {
     current = nil
     geometryDirty = false
     displayedRows.removeAll(keepingCapacity: true)
-    displayedGhostRows.removeAll(keepingCapacity: true)
     displayedPeaks.removeAll(keepingCapacity: true)
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     barMask.path = nil
     tips.path = nil
-    ghost.path = nil
     CATransaction.commit()
   }
 
@@ -111,9 +103,8 @@ final class SpectrumLayerView: NSView {
     guard visible else { return }
     guard let frame, frame.levels.count == SpectrumFrame.pointCount,
       frame.peaks.count == SpectrumFrame.pointCount,
-      frame.sourceLevels.isEmpty || frame.sourceLevels.count == SpectrumFrame.pointCount,
       frame.timestamp.isFinite,
-      [frame.levels, frame.sourceLevels, frame.peaks].contains(where: { values in
+      [frame.levels, frame.peaks].contains(where: { values in
         values.contains { $0.isFinite && $0 > SpectrumFrame.floorDB + 0.05 }
       })
     else {
@@ -214,21 +205,6 @@ final class SpectrumLayerView: NSView {
       }
       barMask.path = bars
     }
-    let nextGhost = rowCounts(frame.sourceLevels)
-    if nextGhost != displayedGhostRows {
-      displayedGhostRows = nextGhost
-      let outlines = CGMutablePath()
-      let ghostWidth = spacing * 0.60 + 3
-      for (index, count) in nextGhost.enumerated() where count > 0 {
-        let height = CGFloat(count - 1) * step + 2.25
-        outlines.addRoundedRect(
-          in: CGRect(
-            x: CGFloat(index) * spacing - ghostWidth / 2,
-            y: size.height - height, width: ghostWidth, height: height), cornerWidth: 1,
-          cornerHeight: 1)
-      }
-      ghost.path = outlines
-    }
     // Snap peak positions to backing pixels, independently of the LED row mask.
     let scale = max(1, lastScale)
     let nextPeaks = frame.peaks.map { db -> CGFloat in
@@ -258,7 +234,6 @@ final class SpectrumLayerView: NSView {
     let opacity = Float(exp(-max(0, now - current.timestamp - 0.15) / 0.28))
     fill.opacity = opacity
     tips.opacity = opacity
-    ghost.opacity = opacity
     if geometryDirty {
       updateGeometry(current)
       geometryDirty = false
@@ -275,18 +250,16 @@ final class SpectrumLayerView: NSView {
     fill.frame = plotLayer.bounds
     barMask.frame = plotLayer.bounds
     tips.frame = plotLayer.bounds
-    ghost.frame = plotLayer.bounds
     let scale = window?.backingScaleFactor ?? 2
     if plotLayer.bounds.size != lastPlotSize || scale != lastScale {
       lastPlotSize = plotLayer.bounds.size
       lastScale = scale
       rebuildTexture(scale: scale)
       displayedRows.removeAll(keepingCapacity: true)
-      displayedGhostRows.removeAll(keepingCapacity: true)
       displayedPeaks.removeAll(keepingCapacity: true)
       geometryDirty = true
     }
-    for child in [fill, barMask, tips, ghost] { child.contentsScale = scale }
+    for child in [fill, barMask, tips] { child.contentsScale = scale }
     CATransaction.commit()
     drawFrame(at: ProcessInfo.processInfo.systemUptime)
   }
