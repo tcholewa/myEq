@@ -12,6 +12,10 @@ struct DesignPreview {
     let directory = URL(fileURLWithPath: CommandLine.arguments[1])
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let model = AppModel(preview: true)
+    if CommandLine.arguments.contains("--spectrum-proposal") {
+      try SpectrumProposal.render(model: model, directory: directory)
+      return
+    }
     if CommandLine.arguments.contains("--preview-only") {
       model.saved.enabled = true
       model.engineStatus.state = .running
@@ -360,7 +364,7 @@ struct DesignPreview {
   @MainActor
   static func render<Content: View>(
     _ content: Content, width: CGFloat, height: CGFloat? = nil, to url: URL,
-    prepare: (() -> Void)? = nil
+    prepare: (() -> Void)? = nil, decorate: ((NSView) -> Void)? = nil
   ) throws {
     let view = NSHostingView(
       rootView: content.frame(width: width, height: height).preferredColorScheme(.dark))
@@ -376,6 +380,7 @@ struct DesignPreview {
     drain()
     view.layoutSubtreeIfNeeded()
     prepare?()
+    decorate?(view)
     guard
       let bitmap = NSBitmapImageRep(
         bitmapDataPlanes: nil,
