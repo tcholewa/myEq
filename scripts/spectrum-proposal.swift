@@ -162,7 +162,8 @@ private struct ProposalBars: View {
       let legendContext = context
       context.clip(to: Path(plot))
       let spacing = plot.width / CGFloat(SpectrumFrame.pointCount - 1)
-      let width = spacing * 0.60
+      let width = spacing * 0.50
+      let ghostWidth = spacing * 0.60 + 3
       let rows = max(1, Int(plot.height * 0.75 / 4))
       func normalized(_ db: Double) -> CGFloat { CGFloat(max(0, min(1, (db + 90) / 90))) }
       func height(_ db: Double) -> CGFloat {
@@ -174,8 +175,8 @@ private struct ProposalBars: View {
         if ghost {
           let h = height(snapshot.source[index])
           let rect = CGRect(
-            x: x - width / 2 - 1.5, y: plot.maxY - h,
-            width: width + 3, height: h)
+            x: x - ghostWidth / 2, y: plot.maxY - h,
+            width: ghostWidth, height: h)
           context.fill(
             Path(roundedRect: rect, cornerRadius: 1), with: .color(.white.opacity(0.018)))
           context.stroke(
@@ -185,26 +186,26 @@ private struct ProposalBars: View {
         let count = Int(ceil(normalized(snapshot.output[index]) * CGFloat(rows)))
         for row in 0..<count {
           let rect = CGRect(
-            x: x - width / 2, y: plot.maxY - CGFloat(row) * 4 - 2.25,
-            width: width, height: 2.25)
+            x: x - width / 2, y: plot.maxY - CGFloat(row) * 4 - 1.75,
+            width: width, height: 1.75)
           context.fill(
             Path(roundedRect: rect, cornerRadius: 0.55),
             with: .linearGradient(
               Gradient(stops: [
-                .init(color: Color(red: 0.76, green: 0.85, blue: 0.76).opacity(0.54), location: 0),
+                .init(color: Color(red: 0.76, green: 0.85, blue: 0.76).opacity(0.44), location: 0),
                 .init(
-                  color: Color(red: 0.55, green: 0.71, blue: 0.59).opacity(0.44), location: 0.35),
+                  color: Color(red: 0.55, green: 0.71, blue: 0.59).opacity(0.34), location: 0.35),
                 .init(
-                  color: Color(red: 0.31, green: 0.49, blue: 0.40).opacity(0.30), location: 0.7),
-                .init(color: Color(red: 0.13, green: 0.24, blue: 0.20).opacity(0.18), location: 1),
+                  color: Color(red: 0.31, green: 0.49, blue: 0.40).opacity(0.22), location: 0.7),
+                .init(color: Color(red: 0.13, green: 0.24, blue: 0.20).opacity(0.12), location: 1),
               ]), startPoint: CGPoint(x: 0, y: plot.minY + plot.height * 0.25),
               endPoint: CGPoint(x: 0, y: plot.maxY)))
         }
         let markerY = plot.maxY - normalized(snapshot.peaks[index]) * plot.height * 0.75
-        let marker = CGRect(x: x - width / 2, y: markerY, width: width, height: 1.25)
+        let marker = CGRect(x: x - width / 2, y: markerY, width: width, height: 1)
         context.fill(
           Path(roundedRect: marker, cornerRadius: 0.5),
-          with: .color(Color(red: 0.85, green: 0.90, blue: 0.84).opacity(0.48)))
+          with: .color(Color(red: 0.85, green: 0.90, blue: 0.84).opacity(0.30)))
       }
       let legend =
         ghost ? "OUTPUT   ·   SOURCE + PREAMP (OUTLINE)   ·   PEAK HOLD" : "OUTPUT   ·   PEAK HOLD"
