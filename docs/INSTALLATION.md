@@ -62,13 +62,13 @@ log show --last 5m --style compact --predicate 'subsystem == "com.tc.myEq" OR ((
 
 ### Driver installed but not loaded
 
-The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3, 0.5.0, 0.5.2, 0.5.3, and 0.5.4 upgrades: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:
+The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3, 0.5.0, 0.5.2, 0.5.3, 0.5.4, and 0.5.5 upgrades: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:
 
 ```sh
 sudo killall -TERM coreaudiod
 ```
 
-macOS relaunches the service. Reopen myEq and playback apps afterward. This restored the virtual output in the tested 0.4.3, 0.5.0, 0.5.2, 0.5.3, and 0.5.4 upgrades without a Mac restart. If output discovery or Music remains stuck after a reload, save your work and restart macOS; repeatedly reloading the service did not resolve the earlier initialization hang. See the [installed upgrade results](VERIFICATION.md#043-installed-upgrade-verification).
+macOS relaunches the service. Reopen myEq and playback apps afterward. This restored the virtual output in the tested 0.4.3, 0.5.0, 0.5.2, 0.5.3, 0.5.4, and 0.5.5 upgrades without a Mac restart. If output discovery or Music remains stuck after a reload, save your work and restart macOS; repeatedly reloading the service did not resolve the earlier initialization hang. See the [installed upgrade results](VERIFICATION.md#043-installed-upgrade-verification).
 
 ### Music skips tracks after installation
 
