@@ -570,3 +570,11 @@ The separate synthetic capture/FFT/DSP/drawing benchmark used eight seconds per 
 The visible-minus-off increment falls from 2.34 to 1.05 percentage points (55.2% lower). Both runs delivered 240 normal-cadence and 80 reduced-motion frames, dropped no snapshots, and captured/delivered no frames in off/hidden states. Local raw results are `build/spectrum-render-comparison.jsonl`, `build/spectrum-pipeline-baseline.log`, and `build/spectrum-pipeline-candidate.jsonl`.
 
 These measurements do not include hardware audio, visible-window compositor/GPU cost, or resize-time texture creation. They do not establish a fix for the installed 0.5.2 underruns. No new package was built, pushed, or installed for this source optimization.
+
+## 0.5.3 release verification
+
+On 2026-10-24, the user authorized documenting, committing, pushing, and installing the 64-band spectrum optimization. Version 0.5.3/build 18 packages the tested renderer and analyzer from `e9a40b6`. The 47 Swift tests, offscreen UI checks, and paired rendering benchmarks above apply to the unchanged implementation; only release metadata and documentation changed during packaging.
+
+`bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, trust identities, recovery launch constraints, version consistency, icon, notices, and installer-script checks. Repository/documentation and whitespace checks pass.
+
+Package: `dist/myEq.pkg`, SHA-256 `0fcd2c24d7ecf90f157956defde5b3d46a3d4c5556c506e7d4cb79534147f708`. This development package remains ad-hoc signed and unnotarized. Installation and hardware playback results are recorded separately; the offscreen CPU improvement is not a claim that transport underruns are fixed.

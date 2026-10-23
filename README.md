@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-The spectrum uses **64 logarithmic LED bars** with cached rendering, soft sage tones, and finer cells that keep the EQ curve visually prominent. Stereo level meters retain their stronger contrast. Audio processing and peak-hold behavior are unchanged. See the [verification record](docs/VERIFICATION.md).
+Version **0.5.3 (build 18)** uses **64 logarithmic LED bars** with cached rendering, soft sage tones, and finer cells that keep the EQ curve visually prominent. Stereo level meters retain their stronger contrast. Audio processing and peak-hold behavior are unchanged. See the [rendering benchmarks and verification](docs/VERIFICATION.md#64-band-spectrum-rendering-optimization-2026-10-24).
 
 ## Screenshots
 
