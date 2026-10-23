@@ -492,3 +492,17 @@ The follow-up palette uses four gradient stops, progressing from dark teal botto
 The L/R level indicators now use 45 segmented cells per channel and the spectrum's dark teal/pale sage palette, oriented from dark left to bright right. The existing amber/orange/red range near maximum level and continuous white held-peak markers remain. The cell mask is created once; updates reveal whole cells without changing the underlying envelope, readings, or audio processing.
 
 `bash scripts/render-design.sh --preview-only` built and rendered both editor sizes, which were visually inspected for meter segmentation, gradient, marker visibility, and readable dBFS values. Strict formatting, repository checks, and `git diff --check` pass. This is a design preview for approval; automated UI/audio suites were not rerun and no installed-app change was made.
+
+## Approved LED design release candidate (0.5.1 / build 16)
+
+The user approved the spectrum and matching stereo meter previews. The release build includes 192 spectrum columns and 45 cells per output channel with the approved gradients. Native meter display-scale updates now reach nested gradient layers and cell masks. Audio capture, analysis, DSP, envelope timing, and peak-hold values remain unchanged.
+
+Final verification on 2026-10-23:
+
+- All 46 Swift tests pass.
+- `bash scripts/render-design.sh` passes spectrum geometry/lifecycle and existing focus/visibility checks. Added meter checks cover the 45-cell masks, independent left/right levels, full-scale bounds, continuous peak positions and readings, display scale propagation, and reset to silence. Both editor sizes render successfully; the final full-size image was visually inspected and the README preview refreshed.
+- Strict Swift formatting, repository/documentation checks, and `git diff --check` pass.
+- `bash scripts/build-installer.sh` produces the signed Release development package with consistent 0.5.1/build 16 versions. `python3 scripts/verify-installer.py` passes signatures, component identities, recovery constraints, versions, icon, notices, and installer-script checks.
+- `python3 scripts/test-installer-security.py` passes the unprivileged upgrade/rollback/uninstall and hostile path/signature fixtures with AddressSanitizer/UndefinedBehaviorSanitizer.
+
+The candidate is `dist/myEq.pkg`, SHA-256 `34fa320beda14e828a50f72d48f58a5a1297351ed47aedd2c6772622809cd227`. It remains ad-hoc signed and unnotarized. No package was installed and no live playback, routing, or installed-window checks were performed for 0.5.1. The earlier synthetic spectrum benchmark applies to the same bar geometry; whole-app compositor/GPU and hardware acceptance remain unmeasured.

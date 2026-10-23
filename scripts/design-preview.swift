@@ -55,6 +55,7 @@ struct DesignPreview {
       prepare: { spectrumFixture(model.inputSpectrum) })
     model.inputSpectrum.update(nil)
     verifySpectrumLayers()
+    verifyMeterLayers()
     model.setEditorVisible(false)
     let hiddenCurves = model.curves
     model.edit { $0.bands[0].gain = 6 }
@@ -97,6 +98,44 @@ struct DesignPreview {
     precondition(model.curves.count == 8 && model.curves[0] != hiddenCurves[0])
     print(
       "PASS: hidden editor/menu graphs stay parked; opening the menu computes only its static preview."
+    )
+  }
+
+  @MainActor
+  static func verifyMeterLayers() {
+    let model = OutputMeterModel()
+    let view = StereoMeterView()
+    view.bind(model)
+    let layers = view.layer!.sublayers!
+    let tracks = layers.filter { $0.mask is CAShapeLayer }
+    let markers = layers.filter { $0.frame.width == 2 }
+    let readings = layers.compactMap { $0 as? CATextLayer }.filter { $0.frame.width == 72 }
+    precondition(tracks.count == 2 && markers.count == 2 && readings.count == 2)
+    for track in tracks {
+      var cells = 0
+      (track.mask as! CAShapeLayer).path!.applyWithBlock {
+        if $0.pointee.type == .closeSubpath { cells += 1 }
+      }
+      precondition(cells == 45)
+      precondition(track.sublayers!.first!.mask!.bounds.width == 0)
+      precondition(track.mask!.contentsScale == view.layer!.contentsScale)
+    }
+    precondition(markers.allSatisfy(\.isHidden))
+    model.update(OutputLevels(left: 1, right: 0.01, reduction: 0, active: true))
+    let fills = tracks.map { $0.sublayers!.first!.mask! }
+    precondition(abs(fills[0].bounds.width - 178.5) < 0.01)
+    precondition(abs(fills[1].bounds.width - 58.5) < 0.01)
+    precondition(markers.allSatisfy { !$0.isHidden })
+    precondition(abs(markers[0].frame.maxX - 251) < 0.01)
+    precondition(abs(markers[1].frame.midX - 131) < 0.01)
+    precondition(readings[0].string as? String == "0.0 dBFS")
+    precondition(readings[1].string as? String == "-40.0 dBFS")
+    model.reset()
+    precondition(fills.allSatisfy { $0.bounds.width == 0 })
+    precondition(markers.allSatisfy(\.isHidden))
+    precondition(readings.allSatisfy { $0.string as? String == "−∞ dBFS" })
+    print(
+      "PASS: LED meter cells, independent levels, full scale, peak markers/readings, display scale and reset."
     )
   }
 

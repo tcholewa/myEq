@@ -106,7 +106,12 @@ final class StereoMeterView: NSView {
 
   private func updateScale() {
     let scale = window?.backingScaleFactor ?? 2
-    for child in layer?.sublayers ?? [] { child.contentsScale = scale }
+    func applyScale(_ layer: CALayer) {
+      layer.contentsScale = scale
+      if let mask = layer.mask { applyScale(mask) }
+      for child in layer.sublayers ?? [] { applyScale(child) }
+    }
+    if let layer { applyScale(layer) }
   }
 
   override func accessibilityValue() -> Any? {
