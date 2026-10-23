@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.2 (build 17)** refines the 192-column LED spectrum with softer sage tones, gentler highlights, and finer cells that keep the EQ curve visually prominent. Stereo level meters retain their stronger contrast. Audio processing and peak-hold behavior are unchanged. See the [design verification](docs/VERIFICATION.md#subtle-spectrum-refinement-2026-10-23).
+Version **0.5.2 (build 17)** refines the 192-column LED spectrum with softer sage tones, gentler highlights, and finer cells that keep the EQ curve visually prominent. Stereo level meters retain their stronger contrast. Audio processing and peak-hold behavior are unchanged. See the [design verification](docs/VERIFICATION.md#subtle-spectrum-refinement-2026-10-23) and [installed upgrade results](docs/VERIFICATION.md#052-installed-upgrade-verification).
 
 ## Screenshots
 
