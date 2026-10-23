@@ -632,4 +632,13 @@ The source layer and its geometry cache, source frame data, second FFT/envelope,
 
 All 48 Swift tests pass, including exact agreement between captured and rendered output through preamp changes, small callbacks, and visibility resets; EQ/limiter measurement and audio-isolation tests also pass. Native audio/concurrency tests, strict Swift formatting, and offscreen UI checks pass. The UI fixture asserts that only the output fill and peak-marker layers exist. Both editor sizes were visually inspected, and the README screenshot now shows the compact output-only editor. Repository/documentation and whitespace checks pass.
 
-This refinement is committed source only; the installed 0.5.4 package and its recorded verification above describe the prior paired-stream release.
+At source verification time, this refinement was committed as `95a2539`; the installed 0.5.4 package still contained the paired-stream display. Release and upgrade results follow below.
+
+
+## 0.5.5 release verification
+
+On 2026-10-24, the user authorized updating documentation, committing, pushing, and installing the processed-output-only analyzer. Version 0.5.5/build 20 packages the verified implementation from `95a2539`. The 48 Swift tests, native audio/concurrency checks, UI checks, and visual inspection above apply to the unchanged implementation; packaging changes only release metadata and documentation.
+
+The Release installer builds successfully. Package verification passes component signatures, XPC trust identities, helper launch constraints, version consistency, resources, notices, and installer scripts. Repository/documentation and whitespace checks pass.
+
+Package: `dist/myEq.pkg`, SHA-256 `4ed405d5ab6685e3f3ffe4e4ce8bb3ffa1ccc3448bbb00363208aef09ec9e083`. This local development package is ad-hoc signed and unnotarized. Installed upgrade results are recorded separately.
