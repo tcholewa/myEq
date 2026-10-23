@@ -613,3 +613,12 @@ Both versions delivered 240 normal-cadence and 80 reduced-motion frames, with ze
 The optimized callback benchmark ran 12,000 256-frame blocks in each of 16 rate/meter/spectrum combinations with zero DSP faults. With meters and paired capture enabled, p99 callback times were 14.75/14.92/15.21/20.33 µs at 44.1/48/96/192 kHz, respectively (0.25/0.28/0.57/1.52% of each block's deadline). It includes frequent preset transitions and requested snapshot publication; it does not establish hardware scheduling reliability. Raw local results: `build/dsp-spectrum-054.jsonl`.
 
 The Release installer builds successfully. Package verification passes component signatures, trust identities, helper launch constraints, version consistency, resources, notices, and installer scripts. Clang static analysis reports no native warnings. The package is `dist/myEq.pkg`, SHA-256 `73a51c1b936b2773dab4796debd069e17c8ebcbdff128ba9be770b0c90cb5a3b`; it is a local ad-hoc-signed, unnotarized development build. Installation results are recorded separately below.
+
+
+### 0.5.4 installed upgrade
+
+The verified package successfully upgraded 0.5.3 on 2026-10-24. Neither myEq nor Music was running at installation start. The installer receipt and app report 0.5.4/build 19; the installed executable matches the candidate, and all five installed component signatures match the trust manifest. Implementation commit `059b3a2` and the approved preview commits were pushed to `origin/master`.
+
+Replacing the unchanged driver again unloaded the virtual output. A single administrator-authorized Core Audio reload restored it before reopening the installed app. After one bounded readiness retry, myEq reached **Equalizing** at 48 kHz, with 512-frame physical/virtual buffers and a 1024-frame reserve. No Mac restart or helper-registration repair was required.
+
+Installed IPC checks passed authentication and rejected wrong-protocol/unauthorized-role requests. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual route. Initial transport diagnostics showed zero underruns and overruns, and one source discontinuity. These short silent-client/startup checks do not establish sustained audible playback or visible-window GPU performance. GitHub CI for the implementation was still running at the time these installation results were recorded; local verification is listed above.
