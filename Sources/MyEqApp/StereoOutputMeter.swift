@@ -148,18 +148,28 @@ private final class ChannelLayers {
     reading = meterText(lastReading, x: 259, y: y, width: 72)
     let track = CALayer()
     track.frame = CGRect(x: 71, y: y + 3, width: 180, height: 6)
-    track.backgroundColor = NSColor(white: 1, alpha: 0.07).cgColor
-    track.cornerRadius = 3
-    track.masksToBounds = true
+    track.backgroundColor = NSColor(white: 1, alpha: 0.045).cgColor
+    let cells = CGMutablePath()
+    for index in 0..<45 {
+      cells.addRoundedRect(
+        in: CGRect(x: CGFloat(index) * 4, y: 0, width: 2.5, height: 6),
+        cornerWidth: 0.55, cornerHeight: 0.55)
+    }
+    let cellMask = CAShapeLayer()
+    cellMask.frame = track.bounds
+    cellMask.path = cells
+    track.mask = cellMask
     let gradient = CAGradientLayer()
     gradient.frame = track.bounds
     gradient.colors = [
-      NSColor(red: 0.60, green: 0.79, blue: 0.65, alpha: 1).cgColor,
-      NSColor(red: 0.60, green: 0.79, blue: 0.65, alpha: 1).cgColor,
+      NSColor(red: 0.12, green: 0.25, blue: 0.20, alpha: 0.30).cgColor,
+      NSColor(red: 0.35, green: 0.62, blue: 0.46, alpha: 0.58).cgColor,
+      NSColor(red: 0.66, green: 0.86, blue: 0.66, alpha: 0.76).cgColor,
+      NSColor(red: 0.86, green: 0.96, blue: 0.80, alpha: 0.88).cgColor,
       NSColor(red: 0.91, green: 0.79, blue: 0.57, alpha: 1).cgColor,
       NSColor.systemOrange.cgColor, NSColor.systemRed.cgColor,
     ]
-    gradient.locations = [0, 0.8, 0.9, 0.98, 1]
+    gradient.locations = [0, 0.24, 0.52, 0.8, 0.9, 0.98, 1]
     gradient.startPoint = CGPoint(x: 0, y: 0.5)
     gradient.endPoint = CGPoint(x: 1, y: 0.5)
     mask.backgroundColor = NSColor.white.cgColor
@@ -174,7 +184,10 @@ private final class ChannelLayers {
   }
 
   func update(level: Double, peak: Double) {
-    let width = 180 * (level - OutputMeterEnvelope.floorDB) / -OutputMeterEnvelope.floorDB
+    let normalized = max(
+      0, min(1, (level - OutputMeterEnvelope.floorDB) / -OutputMeterEnvelope.floorDB))
+    let cells = ceil(normalized * 45)
+    let width = max(0, cells * 4 - 1.5)
     let maskBounds = CGRect(x: 0, y: 0, width: width, height: 6)
     if mask.bounds != maskBounds { mask.bounds = maskBounds }
     let markerX = 180 * (peak - OutputMeterEnvelope.floorDB) / -OutputMeterEnvelope.floorDB

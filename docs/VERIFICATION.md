@@ -486,3 +486,9 @@ No package was installed and no live playback or installed-window interaction wa
 ### Stronger LED gradient preview
 
 The follow-up palette uses four gradient stops, progressing from dark teal bottom rows to pale sage upper rows, with brighter top cells. `bash scripts/render-design.sh --preview-only` successfully built and generated both editor sizes; both were visually inspected for the requested stronger contrast. Formatting, repository checks, and `git diff --check` pass. This palette-only revision is presented for user design approval; the automated UI/audio suites were not rerun and the installed app was not changed.
+
+### Matching LED output meter preview
+
+The L/R level indicators now use 45 segmented cells per channel and the spectrum's dark teal/pale sage palette, oriented from dark left to bright right. The existing amber/orange/red range near maximum level and continuous white held-peak markers remain. The cell mask is created once; updates reveal whole cells without changing the underlying envelope, readings, or audio processing.
+
+`bash scripts/render-design.sh --preview-only` built and rendered both editor sizes, which were visually inspected for meter segmentation, gradient, marker visibility, and readable dBFS values. Strict formatting, repository checks, and `git diff --check` pass. This is a design preview for approval; automated UI/audio suites were not rerun and no installed-app change was made.
