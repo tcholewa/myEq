@@ -522,3 +522,11 @@ The implementation and release documentation were pushed to `origin/master`; thi
 The spectrum now uses desaturated sage colors, lower gradient opacity, and softer top-cell highlights so the EQ curve remains the primary visual element. Cell width decreases from 68% to 60% of sample spacing; cell height decreases from 2.5 to 2.25 points while retaining the 4-point pitch. The 192 samples, frequency positions, level mapping, animation cadence, and input smoothing remain unchanged. Stereo output meters retain the approved stronger contrast.
 
 Before UI verification, `bash scripts/render-design.sh --preview-only` generated full-size and compact editor fixtures. Both were visually inspected for spectrum readability and curve prominence, and the README screenshot was refreshed. `bash scripts/render-design.sh` then passed spectrum geometry/lifecycle, meter, focus, and visibility checks. Strict formatting, repository/documentation checks, and `git diff --check` pass. This is a source/UI refinement; no new installer was built, pushed, or installed, and no live audio or new performance measurement was performed.
+
+## 0.5.2 release verification
+
+On 2026-10-24, the user authorized documenting, pushing, and installing the subtle spectrum refinement. Version 0.5.2/build 17 contains the softer sage palette, reduced highlights, and finer cells described above; output meters, audio processing, and analysis remain unchanged.
+
+`bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, trust identities, recovery launch constraints, version consistency, icon, notices, and installation-script checks. Formatting, repository/documentation checks, and `git diff --check` pass. The source-rendered UI checks recorded above cover this unchanged renderer; audio and performance suites were not repeated for the version-only packaging step.
+
+Package: `dist/myEq.pkg`, SHA-256 `630ae4b8db5de3051a4ccce10754ea12df5fa0a4a93920f9c34baa1636f9d1b9`. This local development package remains ad-hoc signed and unnotarized. Installed results are recorded separately after the upgrade.
