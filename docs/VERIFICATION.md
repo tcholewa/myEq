@@ -538,3 +538,35 @@ On 2026-10-24, the verified package upgraded installed 0.5.1 successfully. Neith
 The installer skipped the Core Audio reload because driver/bridge identities were unchanged. On reopening, myEq reported that the driver was installed but not loaded, reproducing the known file-replacement issue from 0.4.3 and 0.5.0. The bridge authentication probe passed, rejecting wrong-protocol and unauthorized-role requests. The silent playback probe correctly declined to run because the virtual route was inactive. After the user quit myEq, an administrator-authorized Core Audio reload and reopening the app restored the virtual output. No helper-registration repair or Mac restart was needed. The engine reached **Equalizing** at 48 kHz with 512-frame physical/virtual buffers and a 1024-frame reserve.
 
 Fresh silent AudioQueue clients then passed at 44.1 kHz (64 callbacks), 48 kHz (70), and 96 kHz (140), preserving the default virtual route. However, transport counters continued increasing during the short observation after startup, reaching 13 underruns, zero overruns, and 258 discontinuities at 00:13:06 local time. This is not a clean sustained-playback result. The cause was not established, and no audible listening confirmation was obtained. The renderer refinement does not change audio processing; these observations alone do not establish whether it caused the transport behavior.
+
+## 64-band spectrum rendering optimization (2026-10-24)
+
+The analyzer now emits 64 logarithmic peak bands instead of 192. FFT length, audio capture, stereo power averaging, and attack/release timing are unchanged. Each wider band takes the peak power from its FFT-bin range, preserving narrow tones within that band. Frequency resolution is coarser; this remains a qualitative energy display.
+
+The renderer rasterizes the complete LED grid and gradient once per size/backing-scale change, then reveals it through at most 64 rectangular bar clips. A second shape path provides the top-cell highlights. Quantized row comparisons skip both path updates when the visible cells are unchanged. The cached image is approximately 2.5 MiB at the benchmark's 1080 × 198-point view and 2× scale; this figure excludes compositor storage. Capture/analysis/drawing still stop when hidden or disabled, and Reduce Motion still uses 10 Hz.
+
+Verification: synthetic full-size and compact previews were generated and visually inspected before testing. All **47 Swift tests** pass, including new calibrated narrow-tone coverage across the frequency range and existing rate, stereo, silence, capture isolation, and lifecycle tests. Offscreen UI fixtures pass 64-column placement, one-rectangle-per-band masking, texture reuse and resize invalidation, unchanged-row path reuse, stale-frame clearing, Reduce Motion, meter, selection, and focus checks. Formatting, repository/documentation checks, and whitespace checks pass. The README screenshot shows the 64-band renderer.
+
+Performance measurements use the same optimized benchmark harness for the 192-band baseline (renderer from `65cdee2`) and the 64-band candidate. `--render-only` generates a continuously changing full-width spectrum at 30 Hz in a never-shown native window, without audio capture or FFT work. It includes synthetic frame generation and excludes visible compositor/GPU work. Each measurement lasts eight seconds after 400 ms of settling; the two preserved executables run serially, with no concurrent builds/tests.
+
+| Rendering-only CPU (one core = 100%) | 192-band baseline | 64-band cached renderer |
+| --- | ---: | ---: |
+| Paired run 1 | 5.48% | 0.56% |
+| Paired run 2 | 5.50% | 0.62% |
+| Paired run 3 | 5.56% | 0.56% |
+| Median | 5.50% | 0.56% |
+
+The median reduction is **89.8%**. All baseline runs delivered 240 frames; candidate runs delivered 240, 240, and 238 frames over eight seconds. Two earlier exploratory runs measured 7.64% and 0.81%; they are excluded from the paired-run medians. Scheduler/CPU-frequency variation remains possible.
+
+The separate synthetic capture/FFT/DSP/drawing benchmark used eight seconds per mode at 48 kHz/512 frames. These are single runs, not medians:
+
+| Mode | 192-band baseline CPU | 64-band candidate CPU |
+| --- | ---: | ---: |
+| Spectrum off | 0.69% | 0.77% |
+| Visible 30 Hz | 3.04% | 1.82% |
+| Reduce Motion 10 Hz | 1.55% | 1.26% |
+| Hidden | 0.72% | 0.59% |
+
+The visible-minus-off increment falls from 2.34 to 1.05 percentage points (55.2% lower). Both runs delivered 240 normal-cadence and 80 reduced-motion frames, dropped no snapshots, and captured/delivered no frames in off/hidden states. Local raw results are `build/spectrum-render-comparison.jsonl`, `build/spectrum-pipeline-baseline.log`, and `build/spectrum-pipeline-candidate.jsonl`.
+
+These measurements do not include hardware audio, visible-window compositor/GPU cost, or resize-time texture creation. They do not establish a fix for the installed 0.5.2 underruns. No new package was built, pushed, or installed for this source optimization.

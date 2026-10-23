@@ -2,7 +2,7 @@ import Accelerate
 import Foundation
 
 public struct SpectrumFrame: Equatable {
-  public static let pointCount = 192
+  public static let pointCount = 64
   public static let floorDB: Float = -90
   public let levels: [Float]
   public let sampleRate: Double

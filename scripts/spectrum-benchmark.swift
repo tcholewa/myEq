@@ -17,6 +17,10 @@ struct SpectrumBenchmark {
   static func main() {
     NSApplication.shared.setActivationPolicy(.prohibited)
     let duration = Double(CommandLine.arguments.dropFirst().first ?? "8") ?? 8
+    if CommandLine.arguments.contains("--render-only") {
+      benchmarkRendering(duration: duration)
+      return
+    }
     let dsp = meq_create()!
     let bands = (0..<8).map { index in
       MEQBand(
@@ -95,5 +99,49 @@ struct SpectrumBenchmark {
     meq_spectrum_reader_destroy(reader)
     meq_destroy(dsp)
     samples.deallocate()
+  }
+
+  @MainActor
+  static func benchmarkRendering(duration: Double) {
+    let model = InputSpectrumModel()
+    let view = SpectrumLayerView()
+    view.frame = CGRect(x: 0, y: 0, width: 1080, height: 198)
+    let window = NSWindow(
+      contentRect: view.frame, styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = view
+    view.layoutSubtreeIfNeeded()
+    view.bind(model, visible: true, reducedMotion: false)
+    var delivered = 0
+    let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { _ in
+      MainActor.assumeIsolated {
+        let phase = Double(delivered) / 30
+        let levels = (0..<SpectrumFrame.pointCount).map { index -> Float in
+          let x = Double(index) / Double(SpectrumFrame.pointCount - 1)
+          return Float(-45 + 20 * sin(x * 12 + phase * 2) + 12 * cos(x * 31 - phase))
+        }
+        model.update(
+          SpectrumFrame(
+            levels: levels, sampleRate: 48000,
+            timestamp: ProcessInfo.processInfo.systemUptime))
+        delivered += 1
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+    let count = delivered
+    let cpu = cpuTime()
+    let start = ProcessInfo.processInfo.systemUptime
+    RunLoop.main.run(until: Date().addingTimeInterval(duration))
+    let elapsed = ProcessInfo.processInfo.systemUptime - start
+    print(
+      "{\"mode\":\"render_only_30hz\",\"points\":\(SpectrumFrame.pointCount),"
+        + "\"seconds\":\(elapsed),\"cpu_percent_one_core\":\((cpuTime() - cpu) / elapsed * 100),"
+        + "\"delivered\":\(delivered - count)}")
+    timer.invalidate()
+    view.disconnect()
+    window.contentView = nil
+    window.close()
   }
 }

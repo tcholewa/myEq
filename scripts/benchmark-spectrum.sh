@@ -17,4 +17,4 @@ xcrun swiftc -parse-as-library -swift-version 5 -O -module-name SpectrumBenchmar
   Sources/MyEqCore/InputSpectrum.swift Sources/MyEqCore/InputSpectrumMonitor.swift \
   "$destination/InputSpectrumView.swift" scripts/spectrum-benchmark.swift "$destination/DSP.o" \
   -framework AppKit -framework CoreAudio -framework Accelerate -lc++ -o "$destination/benchmark"
-"$destination/benchmark" "${1:-8}"
+"$destination/benchmark" "${1:-8}" "${2:-}"

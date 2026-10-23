@@ -294,6 +294,10 @@ struct DesignPreview {
     spectrumFixture(model)
     precondition(plot.frame == CGRect(x: 34, y: 12, width: 954, height: 160))
     precondition(columns().count == SpectrumFrame.pointCount && mask.path != nil)
+    let texture = fill.contents! as AnyObject
+    var rectangles = 0
+    mask.path!.applyWithBlock { if $0.pointee.type == .closeSubpath { rectangles += 1 } }
+    precondition(rectangles == 64)  // One clip per band, independent of the number of LED rows.
     let oldOpacity = fill.opacity
     RunLoop.main.run(until: Date().addingTimeInterval(0.25))
     precondition(fill.opacity < oldOpacity)
@@ -302,18 +306,24 @@ struct DesignPreview {
 
     var levels = [Float](repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount)
     levels[0] = -45
-    levels[96] = 0
-    levels[191] = -22.5
+    levels[32] = 0
+    levels[63] = -22.5
     send(levels)
     let caps = columns()
     precondition(caps.count == 3)
     precondition(abs(caps[0].midX) < 0.01 && abs(caps[2].midX - 954) < 0.01)
-    precondition(abs(caps[1].midX - 954 * 96 / 191) < 0.01)
+    precondition(abs(caps[1].midX - 954 * 32 / 63) < 0.01)
     precondition(caps[1].minY < caps[2].minY && caps[2].minY < caps[0].minY)
     precondition(caps[1].minY >= 160 * 0.25)
+    precondition((fill.contents! as AnyObject) === texture)
+    let unchangedMask = mask.path!
+    let unchangedTips = tips.path!
+    send(levels.map { $0 - 0.01 })
+    precondition(mask.path! === unchangedMask && tips.path! === unchangedTips)
     view.frame.size = CGSize(width: 700, height: 104)
     view.layoutSubtreeIfNeeded()
     precondition(abs(columns()[2].midX - 654) < 0.01)
+    precondition((fill.contents! as AnyObject) !== texture)
 
     view.bind(model, visible: true, reducedMotion: true)
     spectrumFixture(model)
@@ -334,7 +344,7 @@ struct DesignPreview {
     precondition(mask.path == nil && tips.path == nil)
     view.disconnect()
     print(
-      "PASS: 192 LED columns, sample positions/heights, resize, fade/expiry, Reduce Motion, hide, silence and invalid/stale frames."
+      "PASS: 64 LED columns, cached texture/row geometry, sample positions/heights, resize, fade/expiry, Reduce Motion, hide, silence and invalid/stale frames."
     )
   }
 

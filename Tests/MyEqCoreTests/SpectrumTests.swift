@@ -18,8 +18,8 @@ final class SpectrumTests: XCTestCase {
     let stereo = analyzer.analyze()
     XCTAssertEqual(stereo.max()!, -6.0206, accuracy: 0.03)
     let peak = stereo.indices.max { stereo[$0] < stereo[$1] }!
-    let plottedHz = 20 * pow(1000, Double(peak) / 191)
-    XCTAssertEqual(plottedHz, frequency, accuracy: frequency * 0.04)
+    let plottedHz = 20 * pow(1000, Double(peak) / Double(SpectrumFrame.pointCount - 1))
+    XCTAssertEqual(plottedHz, frequency, accuracy: frequency * 0.06)
     fill(right: -1)
     XCTAssertEqual(analyzer.analyze(), stereo, "Power averaging must not cancel opposite phases")
     fill(right: 0)
@@ -37,6 +37,7 @@ final class SpectrumTests: XCTestCase {
         analyzer.samples[2 * i + 1] = -value
       }
       let values = analyzer.analyze()
+      XCTAssertEqual(values.count, 64)
       XCTAssertTrue(values.allSatisfy { $0.isFinite && (-90...0).contains($0) })
       XCTAssertGreaterThan(values.max()!, -16)
       analyzer.samples[0] = .nan
@@ -47,9 +48,28 @@ final class SpectrumTests: XCTestCase {
     XCTAssertNil(SpectrumAnalyzer(sampleRate: 48000, frames: 7777))
   }
 
+  func testCoarseBandsPreserveNarrowTonesAcrossFrequencyRange() {
+    let analyzer = SpectrumAnalyzer(sampleRate: 48000, frames: 8192)!
+    let halfBandRatio = pow(1000, 0.5 / Double(SpectrumFrame.pointCount - 1))
+    for bin in [5, 13, 39, 170, 511, 1537, 3000] {
+      let frequency = Double(bin) * 48000 / Double(analyzer.frames)
+      for i in 0..<analyzer.frames {
+        let value = Float(0.25 * sin(2 * .pi * Double(bin * i) / Double(analyzer.frames)))
+        analyzer.samples[2 * i] = value
+        analyzer.samples[2 * i + 1] = value
+      }
+      let values = analyzer.analyze()
+      let peak = values.indices.max { values[$0] < values[$1] }!
+      let center = 20 * pow(1000, Double(peak) / Double(SpectrumFrame.pointCount - 1))
+      XCTAssertEqual(values[peak], -12.0412, accuracy: 0.03)
+      XCTAssertGreaterThanOrEqual(frequency, center / halfBandRatio)
+      XCTAssertLessThanOrEqual(frequency, center * halfBandRatio)
+    }
+  }
+
   func testEnvelopeUsesElapsedTimeAndFallsToSilence() {
-    let loud = [Float](repeating: -12, count: 192)
-    let silence = [Float](repeating: -90, count: 192)
+    let loud = [Float](repeating: -12, count: SpectrumFrame.pointCount)
+    let silence = [Float](repeating: -90, count: SpectrumFrame.pointCount)
     var fast = SpectrumEnvelope()
     var slow = SpectrumEnvelope()
     for _ in 0..<30 { fast.update(loud, elapsed: 1.0 / 30) }
