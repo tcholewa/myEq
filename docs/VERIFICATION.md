@@ -467,3 +467,18 @@ The installer kept Core Audio running because driver/bridge identities were unch
 After reopening, the engine reported **Equalizing**, with physical and virtual buffers of 512 frames at 48 kHz and a 1024-frame transport reserve. The installed bridge authenticated and rejected wrong-protocol/unauthorized-role probes. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the active virtual default route. The last transport report showed zero underruns/overruns; no new connection or transport-fault report appeared after the probes. These checks establish startup and fresh-client progress, not audible or sustained-load acceptance.
 
 After installation, the user confirmed **live spectrum and playback, including under heavy load**. This is a successful user visual/listening check of installed 0.5.0; workload duration and CPU measurements were not supplied, so it does not establish the remaining timed-load or device-matrix results. Whole-app CPU, Reduce Motion, occlusion/reopen and the other hardware checks above remain outstanding. The user then authorized pushing the verified changes to GitHub.
+
+## Segmented LED spectrum (2026-10-23)
+
+The continuous spectrum outline and fading trails were replaced with 192 segmented LED columns, one for each existing logarithmic spectrum sample. EQ control points do not determine the column count or positions. Capture, FFT analysis, audio processing, and analyzer smoothing are unchanged.
+
+Before running tests, `bash scripts/render-design.sh --preview-only` generated synthetic 1180 × 900 and 1040 × 740 previews from the production UI. Both were visually inspected; the bars preserve the spectrum shape and leave the EQ curve and controls legible. The README screenshot now shows the LED rendering. The preview-only command builds and renders without verification assertions or installed-app interaction.
+
+Verification:
+
+- `bash scripts/render-design.sh` passes the existing focus/visibility checks plus 192-column count, individual sample positions and relative heights, plot boundaries, resizing, stale-data fade/expiry, Reduce Motion, hidden state, silence, malformed frames, and non-finite levels.
+- `swift test`: 46 tests pass, zero failures.
+- Strict Swift formatting for the changed renderer and fixture, repository checks, and `git diff --check` pass.
+- `bash scripts/benchmark-spectrum.sh`: eight seconds per mode with synthetic 48 kHz stereo input and an offscreen native view. Spectrum off uses 0.81% of one CPU core, visible 30 Hz uses 3.14%, Reduce Motion 10 Hz uses 1.40%, and hidden uses 0.84%. The visible increment is 2.33 percentage points. There are zero dropped snapshots; off and hidden capture/deliver zero frames. This single run includes generated audio and DSP but excludes installed-app audio routing and visible compositor/GPU work.
+
+No package was installed and no live playback or installed-window interaction was tested for this change.

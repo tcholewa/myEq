@@ -18,4 +18,4 @@ xcrun swiftc -parse-as-library -swift-version 5 -O -g -module-name MyEqDesignPre
   "$products/libMyEqCore.a" -framework AppKit -framework SwiftUI -framework ServiceManagement \
   -framework CoreAudio -framework AudioToolbox -lc++ \
   -o "$destination/render"
-"$destination/render" "$destination"
+"$destination/render" "$destination" "$@"

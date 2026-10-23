@@ -12,6 +12,24 @@ struct DesignPreview {
     let directory = URL(fileURLWithPath: CommandLine.arguments[1])
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let model = AppModel(preview: true)
+    if CommandLine.arguments.contains("--preview-only") {
+      model.saved.enabled = true
+      model.engineStatus.state = .running
+      model.engineStatus.outputName = "ADAM Audio D3V"
+      model.engineStatus.sampleRate = 48000
+      model.setEditorVisible(true)
+      drain()
+      model.outputMeter.update(OutputLevels(left: 0.28, right: 0.20, reduction: 0, active: true))
+      try render(
+        EqualizerView(model: model), width: 1180, height: 900,
+        to: directory.appendingPathComponent("editor-spectrum.png"),
+        prepare: { spectrumFixture(model.inputSpectrum) })
+      try render(
+        EqualizerView(model: model), width: 1040, height: 740,
+        to: directory.appendingPathComponent("editor-spectrum-small.png"),
+        prepare: { spectrumFixture(model.inputSpectrum) })
+      return
+    }
     verifySelection(model)
     verifyInitialFocus(model)
     model.saved.enabled = true
@@ -181,18 +199,16 @@ struct DesignPreview {
 
   @MainActor
   static func spectrumFixture(_ model: InputSpectrumModel) {
-    let now = ProcessInfo.processInfo.systemUptime
-    for index in 0..<15 {
-      let age = Double(14 - index) / 15
-      let values = (0..<SpectrumFrame.pointCount).map { point -> Float in
-        let x = Double(point) / Double(SpectrumFrame.pointCount - 1)
-        let bass = 32 * exp(-pow((x - 0.20 - age * 0.015) / 0.11, 2))
-        let voice = 15 * exp(-pow((x - 0.53) / 0.20, 2))
-        let texture = sin(x * 87 + age * 8) * 2 + cos(x * 43) * 3
-        return Float(max(-90, -69 + bass + voice + texture - age * 8))
-      }
-      model.update(SpectrumFrame(levels: values, sampleRate: 48000, timestamp: now - age))
+    let values = (0..<SpectrumFrame.pointCount).map { point -> Float in
+      let x = Double(point) / Double(SpectrumFrame.pointCount - 1)
+      let bass = 32 * exp(-pow((x - 0.20) / 0.11, 2))
+      let voice = 15 * exp(-pow((x - 0.53) / 0.20, 2))
+      let texture = sin(x * 87) * 2 + cos(x * 43) * 3
+      return Float(max(-90, -69 + bass + voice + texture))
     }
+    model.update(
+      SpectrumFrame(
+        levels: values, sampleRate: 48000, timestamp: ProcessInfo.processInfo.systemUptime))
     RunLoop.main.run(until: Date().addingTimeInterval(0.04))
     CATransaction.flush()
   }
@@ -204,33 +220,83 @@ struct DesignPreview {
     view.frame = CGRect(x: 0, y: 0, width: 1000, height: 198)
     view.bind(model, visible: true, reducedMotion: false)
     view.layoutSubtreeIfNeeded()
-    spectrumFixture(model)
     let plot = view.layer!.sublayers!.first!
-    let trails = Array(plot.sublayers!.dropFirst().prefix(16))
-    precondition(trails.contains { $0.opacity > 0 })
+    let fill = plot.sublayers!.first!
+    let mask = fill.mask as! CAShapeLayer
+    let tips = plot.sublayers!.last as! CAShapeLayer
+    func send(_ levels: [Float], age: Double = 0, rate: Double = 48000) {
+      model.update(
+        SpectrumFrame(
+          levels: levels, sampleRate: rate,
+          timestamp: ProcessInfo.processInfo.systemUptime - age))
+      RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+    }
+    func columns() -> [CGRect] {
+      var rectangles: [CGRect] = []
+      // Each rounded cap is an independent closed subpath: exactly one per lit sample.
+      var path = CGMutablePath()
+      tips.path?.applyWithBlock { element in
+        let item = element.pointee
+        switch item.type {
+        case .moveToPoint:
+          path = CGMutablePath()
+          path.move(to: item.points[0])
+        case .addLineToPoint: path.addLine(to: item.points[0])
+        case .addQuadCurveToPoint:
+          path.addQuadCurve(to: item.points[1], control: item.points[0])
+        case .addCurveToPoint:
+          path.addCurve(to: item.points[2], control1: item.points[0], control2: item.points[1])
+        case .closeSubpath: rectangles.append(path.boundingBoxOfPath)
+        @unknown default: break
+        }
+      }
+      return rectangles
+    }
+    spectrumFixture(model)
     precondition(plot.frame == CGRect(x: 34, y: 12, width: 954, height: 160))
-    precondition((plot.sublayers!.first!.mask as! CAShapeLayer).path != nil)
-    let oldOpacity = trails.first(where: { $0.opacity > 0 })!.opacity
-    RunLoop.main.run(until: Date().addingTimeInterval(0.12))
-    precondition(trails.first!.opacity < oldOpacity)
+    precondition(columns().count == SpectrumFrame.pointCount && mask.path != nil)
+    let oldOpacity = fill.opacity
+    RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+    precondition(fill.opacity < oldOpacity)
     RunLoop.main.run(until: Date().addingTimeInterval(1.1))
-    precondition(plot.sublayers!.compactMap { $0 as? CAShapeLayer }.allSatisfy { $0.path == nil })
+    precondition(mask.path == nil && tips.path == nil)
+
+    var levels = [Float](repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount)
+    levels[0] = -45
+    levels[96] = 0
+    levels[191] = -22.5
+    send(levels)
+    let caps = columns()
+    precondition(caps.count == 3)
+    precondition(abs(caps[0].midX) < 0.01 && abs(caps[2].midX - 954) < 0.01)
+    precondition(abs(caps[1].midX - 954 * 96 / 191) < 0.01)
+    precondition(caps[1].minY < caps[2].minY && caps[2].minY < caps[0].minY)
+    precondition(caps[1].minY >= 160 * 0.25)
+    view.frame.size = CGSize(width: 700, height: 104)
+    view.layoutSubtreeIfNeeded()
+    precondition(abs(columns()[2].midX - 654) < 0.01)
+
     view.bind(model, visible: true, reducedMotion: true)
     spectrumFixture(model)
-    precondition(trails.allSatisfy { $0.opacity == 0 })
+    precondition(columns().count == SpectrumFrame.pointCount)
     view.bind(model, visible: false, reducedMotion: false)
     spectrumFixture(model)
-    precondition(plot.sublayers!.compactMap { $0 as? CAShapeLayer }.allSatisfy { $0.path == nil })
-    precondition((plot.sublayers!.first!.mask as! CAShapeLayer).path == nil)
+    precondition(mask.path == nil && tips.path == nil)
     view.bind(model, visible: true, reducedMotion: false)
-    model.update(
-      SpectrumFrame(
-        levels: .init(repeating: -20, count: SpectrumFrame.pointCount), sampleRate: 32000,
-        timestamp: ProcessInfo.processInfo.systemUptime - 2))
-    precondition((plot.sublayers!.last as! CAShapeLayer).path == nil)
+    send(levels, age: 2, rate: 32000)
+    precondition(mask.path == nil && tips.path == nil)
+    send([Float](repeating: .nan, count: SpectrumFrame.pointCount))
+    precondition(mask.path == nil && tips.path == nil)
+    send(levels)
+    send([Float](repeating: SpectrumFrame.floorDB, count: SpectrumFrame.pointCount))
+    precondition(mask.path == nil && tips.path == nil)
+    send(levels)
+    send([0])
+    precondition(mask.path == nil && tips.path == nil)
     view.disconnect()
     print(
-      "PASS: spectrum alignment, timed fade/expiry, Reduce Motion, hide and stale-frame clearing.")
+      "PASS: 192 LED columns, sample positions/heights, resize, fade/expiry, Reduce Motion, hide, silence and invalid/stale frames."
+    )
   }
 
   @MainActor
