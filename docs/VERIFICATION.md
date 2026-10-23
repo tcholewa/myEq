@@ -516,3 +516,9 @@ The installer kept Core Audio running because driver and bridge identities were 
 The installed bridge authentication probe passed, rejecting the wrong protocol and all unauthorized roles. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual output. The post-probe transport diagnostic reported zero underruns and overruns, with one source discontinuity. These checks establish startup and fresh-client progress; they do not establish audible listening, installed-window visual interaction, sustained-load behavior, or the remaining hardware matrix.
 
 The implementation and release documentation were pushed to `origin/master`; this installation record is committed and pushed afterward.
+
+## Subtle spectrum refinement (2026-10-23)
+
+The spectrum now uses desaturated sage colors, lower gradient opacity, and softer top-cell highlights so the EQ curve remains the primary visual element. Cell width decreases from 68% to 60% of sample spacing; cell height decreases from 2.5 to 2.25 points while retaining the 4-point pitch. The 192 samples, frequency positions, level mapping, animation cadence, and input smoothing remain unchanged. Stereo output meters retain the approved stronger contrast.
+
+Before UI verification, `bash scripts/render-design.sh --preview-only` generated full-size and compact editor fixtures. Both were visually inspected for spectrum readability and curve prominence, and the README screenshot was refreshed. `bash scripts/render-design.sh` then passed spectrum geometry/lifecycle, meter, focus, and visibility checks. Strict formatting, repository/documentation checks, and `git diff --check` pass. This is a source/UI refinement; no new installer was built, pushed, or installed, and no live audio or new performance measurement was performed.

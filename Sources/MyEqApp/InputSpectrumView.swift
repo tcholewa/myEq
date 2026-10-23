@@ -51,18 +51,19 @@ final class SpectrumLayerView: NSView {
     layer?.isGeometryFlipped = true
     plotLayer.masksToBounds = true
     layer?.addSublayer(plotLayer)
+    // Keep input energy subordinate to the response curve, even at high levels.
     fill.colors = [
-      NSColor(red: 0.86, green: 0.96, blue: 0.80, alpha: 0.88).cgColor,
-      NSColor(red: 0.66, green: 0.86, blue: 0.66, alpha: 0.76).cgColor,
-      NSColor(red: 0.35, green: 0.62, blue: 0.46, alpha: 0.58).cgColor,
-      NSColor(red: 0.12, green: 0.25, blue: 0.20, alpha: 0.30).cgColor,
+      NSColor(red: 0.76, green: 0.85, blue: 0.76, alpha: 0.54).cgColor,
+      NSColor(red: 0.55, green: 0.71, blue: 0.59, alpha: 0.44).cgColor,
+      NSColor(red: 0.31, green: 0.49, blue: 0.40, alpha: 0.30).cgColor,
+      NSColor(red: 0.13, green: 0.24, blue: 0.20, alpha: 0.18).cgColor,
     ]
     fill.locations = [0, 0.35, 0.7, 1]
     fill.startPoint = CGPoint(x: 0.5, y: 0.25)
     fill.endPoint = CGPoint(x: 0.5, y: 1)
     fill.mask = barMask
     plotLayer.addSublayer(fill)
-    tips.fillColor = NSColor(red: 0.80, green: 0.94, blue: 0.76, alpha: 0.82).cgColor
+    tips.fillColor = NSColor(red: 0.70, green: 0.81, blue: 0.71, alpha: 0.30).cgColor
     plotLayer.addSublayer(tips)
     setAccessibilityElement(false)
   }
@@ -139,9 +140,9 @@ final class SpectrumLayerView: NSView {
     }
     // Keep the same logarithmic sample positions as the original spectrum line.
     let spacing = size.width / CGFloat(SpectrumFrame.pointCount - 1)
-    let width = max(0.5, spacing * 0.68)
+    let width = max(0.5, spacing * 0.60)
     let step: CGFloat = 4
-    let segmentHeight: CGFloat = 2.5
+    let segmentHeight: CGFloat = 2.25
     let rows = max(1, Int(size.height * 0.75 / step))
     for (index, db) in frame.levels.enumerated() {
       let level =
