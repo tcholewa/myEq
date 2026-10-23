@@ -505,4 +505,14 @@ Final verification on 2026-10-23:
 - `bash scripts/build-installer.sh` produces the signed Release development package with consistent 0.5.1/build 16 versions. `python3 scripts/verify-installer.py` passes signatures, component identities, recovery constraints, versions, icon, notices, and installer-script checks.
 - `python3 scripts/test-installer-security.py` passes the unprivileged upgrade/rollback/uninstall and hostile path/signature fixtures with AddressSanitizer/UndefinedBehaviorSanitizer.
 
-The candidate is `dist/myEq.pkg`, SHA-256 `34fa320beda14e828a50f72d48f58a5a1297351ed47aedd2c6772622809cd227`. It remains ad-hoc signed and unnotarized. No package was installed and no live playback, routing, or installed-window checks were performed for 0.5.1. The earlier synthetic spectrum benchmark applies to the same bar geometry; whole-app compositor/GPU and hardware acceptance remain unmeasured.
+The candidate is `dist/myEq.pkg`, SHA-256 `34fa320beda14e828a50f72d48f58a5a1297351ed47aedd2c6772622809cd227`. It remains ad-hoc signed and unnotarized. At candidate verification time, the package had not been installed; installed upgrade results follow below. The earlier synthetic spectrum benchmark applies to the same bar geometry; whole-app compositor/GPU and hardware acceptance remain unmeasured.
+
+## 0.5.1 installed upgrade verification
+
+On 2026-10-23, the user authorized documentation updates, pushing, and installation. The verified package above upgraded the installed 0.5.0 app successfully. Neither myEq nor Music was running when installation began. The receipt reports 0.5.1, the app reports build 16, its executable matches the release candidate, and all five installed component signatures match the installed trust manifest.
+
+The installer kept Core Audio running because driver and bridge identities were unchanged. This upgrade started successfully without a manual Core Audio reload, helper-registration repair, or Mac restart. On opening the installed app, one bounded readiness retry was followed by **Equalizing** at 48 kHz, with 512-frame physical and virtual buffers and a 1024-frame transport reserve.
+
+The installed bridge authentication probe passed, rejecting the wrong protocol and all unauthorized roles. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (69), and 96 kHz (140), preserving the default virtual output. The post-probe transport diagnostic reported zero underruns and overruns, with one source discontinuity. These checks establish startup and fresh-client progress; they do not establish audible listening, installed-window visual interaction, sustained-load behavior, or the remaining hardware matrix.
+
+The implementation and release documentation were pushed to `origin/master`; this installation record is committed and pushed afterward.

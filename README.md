@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.1 (build 16)** adds 192 LED spectrum columns and matching segmented stereo level meters with stronger dark-to-light gradients. Audio processing and peak-hold behavior are unchanged. See the [verified release build](docs/VERIFICATION.md#approved-led-design-release-candidate-051--build-16).
+Version **0.5.1 (build 16)** adds 192 LED spectrum columns and matching segmented stereo level meters with stronger dark-to-light gradients. Audio processing and peak-hold behavior are unchanged. See the [verified release build](docs/VERIFICATION.md#approved-led-design-release-candidate-051--build-16) and [installed upgrade checks](docs/VERIFICATION.md#051-installed-upgrade-verification).
 
 ## Screenshots
 
