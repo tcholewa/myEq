@@ -651,3 +651,12 @@ The verified package successfully upgraded 0.5.4 on 2026-10-24. Neither myEq nor
 Driver replacement again unloaded the virtual output. A single administrator-authorized Core Audio reload restored it. Device inventory returned slowly, but the completed app diagnostics show **Equalizing** shortly after launch at 48 kHz, with 512-frame physical/virtual buffers and a 1024-frame reserve. No second reload, Mac restart, or helper-registration repair was needed.
 
 Installed IPC checks passed. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (70), and 96 kHz (140), preserving the default virtual output. Initial transport diagnostics reported zero underruns and overruns, with one source discontinuity. These short startup/client checks do not establish sustained audible playback or visible-window performance. Release CI was still running during installation verification; the previous 0.5.4 revision's CI had passed.
+
+
+## Sage controls and subtle combined response
+
+The enabled EQ power button, preamp waveform icon, and Auto preamp switch now share `Studio.active`, the sage green used by Spectrum. The shared power control also updates the menu's enabled button. Auto uses a compact SwiftUI switch style because the native switch remained gray in the rendered inactive window despite a tint. It exposes a native Toggle accessibility representation, uses standard Button activation, and disables thumb animation under Reduce Motion.
+
+The editor's combined response curve is reduced from 2.2 points at 95% ink opacity to 1.35 points at 64% opacity. Its legend uses the same shared style. The spectrum data, meter ballistics, and DSP are unchanged.
+
+`bash scripts/render-design.sh` passes the existing focus, selection, spectrum/meter, visibility, and menu checks. Full-size and compact editor fixtures were visually inspected, including the green Auto on-state, and the README screenshot was refreshed. Strict Swift formatting, repository/documentation, and whitespace checks pass. This is a verified source/UI refinement; it has not yet been packaged, pushed, or installed.

@@ -166,7 +166,8 @@ struct EqualizerView: View {
         .help(
           "Filled bars show output after EQ and peak protection. Spectrum levels use a separate scale from EQ gain."
         )
-        Capsule().fill(Studio.ink).frame(width: 14, height: 2)
+        Capsule().fill(Studio.combinedResponse)
+          .frame(width: 14, height: Studio.combinedResponseWidth)
         Text("Combined").font(.system(size: 10)).foregroundStyle(Studio.secondary)
       }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 10)
       ResponseGraph(model: model).frame(height: compact ? 104 : 198)
@@ -185,7 +186,7 @@ struct EqualizerView: View {
   }
   private var preampBar: some View {
     HStack(spacing: 14) {
-      Image(systemName: "waveform.path").foregroundStyle(Studio.accent).font(.system(size: 16))
+      Image(systemName: "waveform.path").foregroundStyle(Studio.active).font(.system(size: 16))
       Text("Preamp").font(.system(size: 11, weight: .medium))
       Text(String(format: "%+.1f", model.effectivePreamp))
         .font(.system(size: 14, weight: .medium, design: .monospaced))
@@ -205,7 +206,7 @@ struct EqualizerView: View {
         isOn: Binding(
           get: { model.saved.current.autoPreamp },
           set: { value in model.edit { $0.autoPreamp = value } })
-      ).toggleStyle(.switch).controlSize(.mini).font(.system(size: 11))
+      ).toggleStyle(StudioSwitchStyle()).font(.system(size: 11))
         .help("Automatically leaves headroom for boosted frequencies")
       Rectangle().fill(Studio.line).frame(width: 1, height: 18).padding(.horizontal, 4)
       Label("Peak protection", systemImage: "checkmark.shield")

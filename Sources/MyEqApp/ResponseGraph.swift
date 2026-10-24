@@ -74,8 +74,9 @@ struct ResponseGraph: View {
             lineWidth: index == model.selectedBand ? 1.7 : 1)
         }
         context.stroke(
-          curvePath(model.combined), with: .color(Studio.ink.opacity(0.95)),
-          style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+          curvePath(model.combined), with: .color(Studio.combinedResponse),
+          style: StrokeStyle(
+            lineWidth: Studio.combinedResponseWidth, lineCap: .round, lineJoin: .round))
         for band in model.saved.current.bands where band.enabled {
           let point = CGPoint(
             x: x(min(band.frequency, frequencyLimit)), y: y(band.type.hasGain ? band.gain : 0))

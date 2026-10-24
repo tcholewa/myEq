@@ -10,6 +10,8 @@ enum Studio {
   static let secondary = Color(red: 0.57, green: 0.59, blue: 0.61)
   static let accent = Color(red: 0.91, green: 0.79, blue: 0.57)
   static let active = Color(red: 0.60, green: 0.79, blue: 0.65)
+  static let combinedResponse = ink.opacity(0.64)
+  static let combinedResponseWidth: CGFloat = 1.35
   static let line = Color.white.opacity(0.075)
   static let statusIcon: NSImage = {
     let image = NSImage(size: NSSize(width: 20, height: 18), flipped: false) { _ in
@@ -124,7 +126,7 @@ struct PowerControl: View {
       .frame(width: compact ? 40 : 102, height: 40)
       .background(
         RoundedRectangle(cornerRadius: compact ? 13 : 12)
-          .fill(model.saved.enabled ? Studio.accent : Studio.raised)
+          .fill(model.saved.enabled ? Studio.active : Studio.raised)
       )
       .overlay(RoundedRectangle(cornerRadius: compact ? 13 : 12).strokeBorder(.white.opacity(0.07)))
     }
@@ -133,6 +135,34 @@ struct PowerControl: View {
     .accessibilityLabel(model.saved.enabled ? "Bypass equalizer" : "Enable equalizer")
     .accessibilityValue(model.saved.enabled ? "Enabled" : "Bypassed")
     .help(model.saved.enabled ? "Bypass EQ · ⌘E" : "Enable EQ · ⌘E")
+  }
+}
+
+struct StudioSwitchStyle: ToggleStyle {
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.accessibilityReduceMotion) private var reducedMotion
+
+  func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: 8) {
+        configuration.label
+        Capsule()
+          .fill(configuration.isOn ? Studio.active : Studio.raised)
+          .frame(width: 36, height: 16)
+          .overlay(alignment: .leading) {
+            Circle().fill(Studio.ink).frame(width: 12, height: 12)
+              .offset(x: configuration.isOn ? 22 : 2)
+          }
+      }.contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .opacity(isEnabled ? 1 : 0.35)
+    .animation(reducedMotion ? nil : .easeOut(duration: 0.12), value: configuration.isOn)
+    .accessibilityRepresentation {
+      Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+    }
   }
 }
 
