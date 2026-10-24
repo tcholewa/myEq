@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.5 (build 20)** shows measured **post-EQ output** in 64 subtle LED bars, with no source overlay or column outlines. Bars and held peak markers fall with the same timing as the stereo level meters. Cached rendering and visibility gating keep the display lightweight. See the [output-only refinement](docs/VERIFICATION.md#processed-output-only-spectrum).
+Version **0.5.6 (build 21)** shows measured **post-EQ output** in 64 subtle LED bars, with no source overlay or column outlines. Bars and held peak markers fall with the same timing as the stereo level meters. The EQ-on button, preamp icon, and Auto switch share Spectrum’s sage green, and the combined response curve is thinner and softer. Cached rendering and visibility gating keep the display lightweight. See the [output-only refinement](docs/VERIFICATION.md#processed-output-only-spectrum).
 
 ## Screenshots
 

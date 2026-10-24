@@ -659,4 +659,13 @@ The enabled EQ power button, preamp waveform icon, and Auto preamp switch now sh
 
 The editor's combined response curve is reduced from 2.2 points at 95% ink opacity to 1.35 points at 64% opacity. Its legend uses the same shared style. The spectrum data, meter ballistics, and DSP are unchanged.
 
-`bash scripts/render-design.sh` passes the existing focus, selection, spectrum/meter, visibility, and menu checks. Full-size and compact editor fixtures were visually inspected, including the green Auto on-state, and the README screenshot was refreshed. Strict Swift formatting, repository/documentation, and whitespace checks pass. This is a verified source/UI refinement; it has not yet been packaged, pushed, or installed.
+`bash scripts/render-design.sh` passes the existing focus, selection, spectrum/meter, visibility, and menu checks. Full-size and compact editor fixtures were visually inspected, including the green Auto on-state, and the README screenshot was refreshed. Strict Swift formatting, repository/documentation, and whitespace checks pass. At source verification time, this UI refinement was committed as `ac4b46b`; release and installation verification follow below.
+
+
+## 0.5.6 release verification
+
+On 2026-10-24, the user authorized documentation, commits, push, and installation of the sage controls and subtle combined response. Version 0.5.6/build 21 packages the verified UI from `ac4b46b`. The rendered full-size/compact previews and UI/focus/visibility checks above apply to the unchanged implementation; packaging changes only release metadata and documentation.
+
+The Release installer builds successfully. Package verification passes component signatures, XPC trust identities, helper launch constraints, version consistency, resources, notices, and installer scripts. Repository/documentation and whitespace checks pass.
+
+Package: `dist/myEq.pkg`, SHA-256 `66539afede70dc1ed1eded400da625b3b036c62b7c70ca6dbd9b1efa58b47b45`. This local development package is ad-hoc signed and unnotarized. Installed upgrade results are recorded separately.
