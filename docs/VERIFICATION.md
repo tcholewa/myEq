@@ -669,3 +669,12 @@ On 2026-10-24, the user authorized documentation, commits, push, and installatio
 The Release installer builds successfully. Package verification passes component signatures, XPC trust identities, helper launch constraints, version consistency, resources, notices, and installer scripts. Repository/documentation and whitespace checks pass.
 
 Package: `dist/myEq.pkg`, SHA-256 `66539afede70dc1ed1eded400da625b3b036c62b7c70ca6dbd9b1efa58b47b45`. This local development package is ad-hoc signed and unnotarized. Installed upgrade results are recorded separately.
+
+
+### 0.5.6 installed upgrade
+
+The verified package successfully upgraded 0.5.5 on 2026-10-24. Neither myEq nor Music was running at installation start. The receipt and app report 0.5.6/build 21; the installed executable matches the candidate, and all five installed component signatures match the trust manifest. UI implementation `ac4b46b` and release commit `66fb224` were pushed to `origin/master`.
+
+The virtual output remained available after installation, so no manual Core Audio reload or Mac restart was required. Reopening the installed app reached **Equalizing** at 48 kHz, with 512-frame physical/virtual buffers and a 1024-frame reserve.
+
+Installed IPC checks passed. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (70), and 96 kHz (139), preserving the default virtual output. Transport diagnostics reported zero underruns and overruns; source discontinuities increased from one initially to seven after the client checks. These short checks do not establish sustained audible playback or installed-window interaction/accessibility behavior. Release CI was still running during installation verification; the previous 0.5.5 revision's CI had passed.
