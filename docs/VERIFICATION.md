@@ -698,3 +698,12 @@ Clang static analysis, strict Swift formatting, repository/documentation checks 
 On 2026-10-27, implementation/release commit `75e2371` was pushed to `origin/master` after the local verification above. The installer checksum remains `923df0469be5a1d7f7e56f05cba0a52d6220cb378b453864df0f3a6e287a8f1c`.
 
 At the initial installation attempt, neither myEq nor Music was running. The command-line installer did not start because administrator authentication was required. Computer Use permission was unavailable for macOS Installer. The installed app and package receipt still report 0.5.6; no 0.5.7 installation or live playback success is claimed at this point.
+
+
+### 0.5.7 installed upgrade
+
+On 2026-10-27, the user authorized proceeding with installation through the macOS administrator prompt. The verified package successfully upgraded 0.5.6. Neither myEq nor Music was running at installation start. The receipt and installed app report 0.5.7/build 22, the installed executable matches the verified candidate, and all five installed component signatures match the installed trust manifest.
+
+The app reopened successfully with its saved EQ enable preference off and Botaniq2 preserved. Startup diagnostics report **Bypassed**. The myEq virtual output remains available at 48 kHz, and ADAM Audio D3V remains the default media/system output at 48 kHz. No manual Core Audio reload or Mac restart was needed. Installed bridge checks pass authentication and reject wrong-protocol and unauthorized-role requests.
+
+The fresh silent playback probe exited with its expected inactive-route status 78 because EQ was bypassed; it did not change routing or enable EQ. Active-session transport counters, sustained audible webpage playback, and audio/video synchronization remain unverified. Enable EQ and replay the reported page to complete those checks.
