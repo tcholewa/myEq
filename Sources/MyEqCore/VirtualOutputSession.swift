@@ -23,6 +23,10 @@ final class VirtualOutputSession {
   private var reportedUnderruns: UInt64 = 0
   private var reportedOverruns: UInt64 = 0
   private var reportedDiscontinuities: UInt64 = 0
+  private var reportedShortReads: UInt64 = 0
+  private var reportedConverterErrors: UInt64 = 0
+  private var reportedBurstFrames: UInt32 = 0
+  private var reportedTargetFrames: UInt32 = 0
   private var volume: HardwareVolume?
   deinit {
     stop()
@@ -156,15 +160,23 @@ final class VirtualOutputSession {
     if time - diagnosticTime >= 5,
       health.underruns != reportedUnderruns || health.overruns != reportedOverruns
         || health.discontinuities != reportedDiscontinuities
+        || health.shortReads != reportedShortReads
+        || health.converterErrors != reportedConverterErrors
+        || health.observedBurstFrames != reportedBurstFrames
+        || health.targetFrames != reportedTargetFrames
     {
       // Control-queue diagnostics only, at most once per five seconds. No audio data.
       logger.notice(
-        "Transport underruns=\(health.underruns) overruns=\(health.overruns) discontinuities=\(health.discontinuities) buffered=\(health.bufferedFrames) ratio=\(health.correction)"
+        "Transport underruns=\(health.underruns) overruns=\(health.overruns) discontinuities=\(health.discontinuities) buffered=\(health.bufferedFrames) ratio=\(health.correction) observedBurst=\(health.observedBurstFrames) target=\(health.targetFrames) shortReads=\(health.shortReads) converterErrors=\(health.converterErrors) converterStatus=\(health.lastConverterStatus)"
       )
       diagnosticTime = time
       reportedUnderruns = health.underruns
       reportedOverruns = health.overruns
       reportedDiscontinuities = health.discontinuities
+      reportedShortReads = health.shortReads
+      reportedConverterErrors = health.converterErrors
+      reportedBurstFrames = health.observedBurstFrames
+      reportedTargetFrames = health.targetFrames
     }
     if health.invalidSamples > 8 {
       throw AudioFailure(

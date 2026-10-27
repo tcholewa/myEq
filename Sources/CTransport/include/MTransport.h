@@ -15,6 +15,10 @@ typedef struct {
   uint32_t bufferedFrames;
   double correction;
   bool connected;
+  // Renderer-local diagnostics; not part of the shared-memory protocol.
+  uint32_t observedBurstFrames, targetFrames;
+  uint64_t shortReads, converterErrors;
+  OSStatus lastConverterStatus;
 } MEQTransportHealth;
 typedef struct {uint64_t callbacks, maximumNS, overHalfPeriod, overPeriod;} MEQRenderTiming;
 // Opt-in MYEQ_RENDER_TIMING=1, configured before renderer creation; control-reader only.

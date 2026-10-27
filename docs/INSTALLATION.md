@@ -60,6 +60,12 @@ For a recurrence, note the time, workload and whether EQ recovered or needed Ret
 log show --last 5m --style compact --predicate 'subsystem == "com.tc.myEq" OR ((process == "myEqBridge" OR process == "myEqRecovery") AND eventMessage CONTAINS "myEq:")'
 ```
 
+### Webpage audio crackles with EQ enabled
+
+Version 0.5.7 observes actual producer bursts instead of relying only on the nominal virtual buffer size. It raises the reserve when larger batches arrive, retaining that reserve until the session restarts. A 4096-frame burst can require an 8192-frame reserve (170.7 ms at 48 kHz), so check video synchronization as well as sound quality.
+
+For a recurrence, include the browser, page, approximate time and physical output. Transport logs report `observedBurst`, `target`, genuine `shortReads`, and separate `converterErrors`/`converterStatus`; a webpage’s encoded bitrate alone does not establish a device-format mismatch.
+
 ### Driver installed but not loaded
 
 The installer reloads Core Audio for fresh installations or changed driver/bridge identities. It skips the reload when both identities are unchanged, but macOS can unload the driver during file replacement. This happened in the tested 0.4.3, 0.5.0, 0.5.2, 0.5.3, 0.5.4, and 0.5.5 upgrades: physical outputs remained available while the myEq output disappeared. If the driver is installed but not loaded, quit myEq and audio apps and wait until a system-wide audio interruption is acceptable, then run:

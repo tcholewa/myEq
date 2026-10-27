@@ -18,6 +18,7 @@ struct MEQConnection {
   uint64_t volumeSequence=0,generation=0;
 };
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static_assert(std::atomic<OSStatus>::is_always_lock_free);
 static_assert(std::atomic<double>::is_always_lock_free);
 struct MEQRenderer {
   std::shared_ptr<Mapping> memory;
@@ -32,6 +33,10 @@ struct MEQRenderer {
   std::array<std::atomic<uint64_t>,8> timingBins{};
   std::atomic<uint64_t> timingMaximum{0};
   std::atomic<uint32_t> sourceFrames{0};
+  uint64_t previousWritten=0;
+  std::atomic<uint32_t> observedBurstFrames{0},targetFrames{0};
+  std::atomic<uint64_t> shortReads{0},converterErrors{0};
+  std::atomic<OSStatus> lastConverterStatus{noErr};
   uint64_t discontinuity=0;
   bool primed=false,shortRead=false;
   Drift drift;
@@ -40,6 +45,11 @@ struct MEQRenderer {
   std::array<float,8192*2> stereo{};
   std::array<float,8192> leftSamples{},rightSamples{};
   ~MEQRenderer(){if(converter){AudioUnitUninitialize(converter);AudioComponentInstanceDispose(converter);}}
+  void converterFailed(OSStatus status){
+    lastConverterStatus.store(status,std::memory_order_relaxed);
+    converterErrors.fetch_add(1,std::memory_order_relaxed);
+    memory->s->invalidSamples.fetch_add(1,std::memory_order_relaxed);
+  }
 };
 // Single callback writer; control readers only load. No CAS loop, allocation or logging.
 struct RenderTimer {
@@ -173,6 +183,8 @@ static OSStatus supply(void *context,AudioUnitRenderActionFlags *,const AudioTim
 extern "C" MEQRenderer *meq_renderer_create(MEQConnection *c,MEQDSP *dsp,double rate,uint32_t frames,uint32_t sourceFrames,MEQChannel left,MEQChannel right,char *out,size_t size){
   if(!c||!c->memory||!dsp||frames>4096||!frames||!sourceFrames||sourceFrames>4096){copyError(out,size,"Unsupported output buffer size.");return nullptr;}
   auto r=std::make_unique<MEQRenderer>();r->memory=c->memory;r->dsp=dsp;r->rate=rate;r->left=left;r->right=right;r->outputFrames=frames;r->sourceFrames=sourceFrames;r->target=std::max(256u,2*std::max(frames,sourceFrames));r->fadeFrames=uint32_t(ceil(rate*.005));
+  r->previousWritten=c->memory->s->written.load(std::memory_order_acquire);
+  r->targetFrames.store(r->target,std::memory_order_relaxed);
   const char *timing=getenv("MYEQ_RENDER_TIMING");r->timingEnabled=timing&&strcmp(timing,"1")==0;
   AudioComponentDescription description{kAudioUnitType_FormatConverter,kAudioUnitSubType_Varispeed,kAudioUnitManufacturer_Apple,0,0};
   auto component=AudioComponentFindNext(nullptr,&description);
@@ -203,7 +215,9 @@ extern "C" bool meq_renderer_set_source_frames(MEQRenderer *r,uint32_t frames){
 extern "C" void meq_renderer_destroy(MEQRenderer *r){delete r;}
 extern "C" MEQTransportHealth meq_transport_health(MEQRenderer *r){
   if(!r)return {};auto s=r->memory->s;
-  return {s->rendered.load(),s->underruns.load(),s->overruns.load(),s->discontinuities.load(),s->invalidSamples.load(),available(s),r->correction.load(),bool(s->active.load())};
+  return {s->rendered.load(),s->underruns.load(),s->overruns.load(),s->discontinuities.load(),s->invalidSamples.load(),available(s),r->correction.load(),bool(s->active.load()),
+    r->observedBurstFrames.load(std::memory_order_relaxed),r->targetFrames.load(std::memory_order_relaxed),
+    r->shortReads.load(std::memory_order_relaxed),r->converterErrors.load(std::memory_order_relaxed),r->lastConverterStatus.load(std::memory_order_relaxed)};
 }
 extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,const AudioBufferList*,const AudioTimeStamp*,AudioBufferList *out,const AudioTimeStamp *timestamp,void *context){
   auto r=static_cast<MEQRenderer*>(context);auto s=r->memory->s;
@@ -217,20 +231,32 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
   const uint32_t frames=count(r->left);
   if(!frames||frames!=count(r->right)||frames>8192){s->invalidSamples.fetch_add(1,std::memory_order_relaxed);return noErr;}
   timing.frames=frames;
-  // Reserve two blocks of the larger clock domain, not just two hardware blocks.
-  // A 512-frame producer cannot continuously feed a 128-frame device from 256 frames.
-  const auto target=std::max(256u,2*std::max(frames,r->sourceFrames.load(std::memory_order_relaxed)));
-  if(target!=r->target){
-    if(target>r->target)r->primed=false;
-    r->target=target;r->drift={};
+  // HAL's nominal quantum does not describe batched delivery. Observe cursor
+  // advances so one large WriteMix and several grouped smaller writes both count.
+  // Keep the high-water mark for this renderer, including across re-priming.
+  const auto written=s->written.load(std::memory_order_acquire);
+  auto burst=r->observedBurstFrames.load(std::memory_order_relaxed);
+  if(written>=r->previousWritten&&written-r->previousWritten<=capacity){
+    burst=std::max(burst,uint32_t(written-r->previousWritten));
+    r->observedBurstFrames.store(burst,std::memory_order_relaxed);
+  }
+  r->previousWritten=written;
+  const auto configured=std::max(256u,2*std::max(frames,r->sourceFrames.load(std::memory_order_relaxed)));
+  const auto target=std::max(configured,2*std::min(burst,capacity/4));
+  if(target>r->target){
+    // Preserve queued samples while filling the larger reserve. Never chase
+    // individual arrivals by shrinking the reserve during an active session.
+    r->primed=false;r->target=target;r->drift={};
+    r->targetFrames.store(target,std::memory_order_relaxed);
   }
   auto discontinuity=s->discontinuities.load(std::memory_order_acquire);
   if(discontinuity!=r->discontinuity){r->discontinuity=discontinuity;r->primed=false;discard(s);}
   bool ready=s->active.load(std::memory_order_acquire)&&now()<s->deadline.load(std::memory_order_relaxed);
   if(!ready){r->primed=false;discard(s);}
   if(ready&&!r->primed&&available(s)>=r->target){
-    if(AudioUnitReset(r->converter,kAudioUnitScope_Global,0)){
-      s->invalidSamples.fetch_add(1,std::memory_order_relaxed);return noErr;
+    const auto status=AudioUnitReset(r->converter,kAudioUnitScope_Global,0);
+    if(status){
+      r->converterFailed(status);return noErr;
     }
     r->primed=true;r->fade=0;r->drift={};
   }
@@ -238,8 +264,9 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
   if(ready&&r->primed){
     double ratio=r->drift.update(double(available(s))-r->target,r->rate,frames/r->rate);r->correction.store(ratio,std::memory_order_relaxed);
     if(Float32(ratio)!=r->appliedRate){
-      if(AudioUnitSetParameter(r->converter,kVarispeedParam_PlaybackRate,kAudioUnitScope_Global,0,Float32(ratio),0)){
-        s->invalidSamples.fetch_add(1,std::memory_order_relaxed);r->primed=false;return noErr;
+      const auto status=AudioUnitSetParameter(r->converter,kVarispeedParam_PlaybackRate,kAudioUnitScope_Global,0,Float32(ratio),0);
+      if(status){
+        r->converterFailed(status);r->primed=false;return noErr;
       }
       r->appliedRate=Float32(ratio);
     }
@@ -247,7 +274,11 @@ extern "C" OSStatus meq_output_callback(AudioObjectID,const AudioTimeStamp*,cons
     AudioUnitRenderActionFlags flags=0;r->shortRead=false;
     OSStatus status=AudioUnitRender(r->converter,&flags,timestamp,0,frames,reinterpret_cast<AudioBufferList*>(&buffers));
     if(status||r->shortRead){
-      if(s->sourceRunning.load(std::memory_order_relaxed))s->underruns.fetch_add(1,std::memory_order_relaxed);
+      if(status)r->converterFailed(status);
+      if(r->shortRead){
+        r->shortReads.fetch_add(1,std::memory_order_relaxed);
+        if(s->sourceRunning.load(std::memory_order_relaxed))s->underruns.fetch_add(1,std::memory_order_relaxed);
+      }
       r->primed=false;discard(s);
     }else for(uint32_t i=0;i<frames;i++){
       const auto fadeFrames=r->fadeFrames;

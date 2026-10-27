@@ -16,6 +16,7 @@ if [ "${1:-}" = "installed-ipc" ]; then
 fi
 if [ "${1:-}" = "tsan" ]; then
   common+=(-O1 -g -fsanitize=thread)
+  xcrun clang++ "${common[@]}" Tests/Native/TransportTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/transport-tsan
   xcrun clang++ "${common[@]}" Tests/Native/SpectrumTests.mm -framework Foundation -o build/native-tests/spectrum-tsan
   xcrun clang++ "${common[@]}" Tests/Native/ConsoleUserTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/console-user-tsan
   xcrun clang++ "${common[@]}" Tests/Native/HeartbeatDelayTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/heartbeat-delay-tsan
@@ -26,6 +27,7 @@ if [ "${1:-}" = "tsan" ]; then
   build/native-tests/security-tsan
   build/native-tests/recovery-tsan
   build/native-tests/spectrum-tsan
+  build/native-tests/transport-tsan
   exit
 fi
 if [ "${1:-}" = "asan" ]; then common+=(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all); fi
