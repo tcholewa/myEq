@@ -86,6 +86,10 @@ macOS relaunches the service. Reopen myEq and playback apps afterward. This rest
 
 Music can retain a stale audio-service connection after Core Audio reloads. Quit Music completely with ⌘Q and reopen it before testing again. The observed cause and fresh-client checks are recorded in [verification](VERIFICATION.md#music-skipping-tracks-after-installation).
 
+### Core Audio uses excessive CPU after an upgrade
+
+During the 0.5.8 upgrade, Core Audio entered a plug-in-list reconciliation loop even with myEq closed. Unloading myEq's driver stopped the load, but restoring it and restarting only the audio service reproduced the loop. Restarting macOS cleared the observed problem with the same package and driver installed; subsequent startup and controlled session-recovery checks passed. The precise underlying cause remains unconfirmed. If device queries hang or Core Audio stays busy after a service reload, save your work and restart macOS rather than repeatedly reloading the service. See the [installation observations and verification limits](VERIFICATION.md#058-installed-upgrade-and-recovery-check).
+
 ### No sound or an unexpected output
 
 Bypass or quit myEq, select your physical speakers/headphones in macOS, and verify ordinary playback. Quit other system equalizers before enabling myEq again. Check the [supported output types](../README.md#output-compatibility); AirPlay, aggregate devices, and surround are excluded.
