@@ -44,6 +44,12 @@ Launch `/Applications/myEq.app` directly after quitting development copies. Xcod
 
 Check that the background helper is allowed in System Settings, then use **Retry**. Temporary connection failures retry automatically before showing an error. Reinstall the complete current package if components came from different builds.
 
+### Invalid or stale audio session
+
+This message means a helper rejected the audio session's generation or ownership. It does not by itself establish that a background process crashed. Use **Retry** to start a fresh session; if the error returns, note the time and whether it followed an output change, sleep/wake, screen lock, or heavy CPU work.
+
+An isolated source test confirmed a recovery-ordering defect in 0.5.7: when restoration finishes before the app's next heartbeat, the bridge forgets the retired generation and returns this error as permanent. The app then stops automatic reconnection. The reported incident's initiating event remains unconfirmed; see the [investigation and verification limits](VERIFICATION.md#invalid-or-stale-audio-session-investigation-057).
+
 ### Helper disconnect after screen lock
 
 Version 0.4.4 separates console-session eligibility from system sleep and declares ongoing audio/recovery work to macOS while EQ is active. A lock by itself is intended to leave EQ running. Temporary helper interruptions show **Reconnecting…** and retry four times; authentication/protocol failures remain errors. If retries are exhausted, use **Retry** after returning to your session. Actual sleep or switching users suspends EQ and returning resumes it when enabled.

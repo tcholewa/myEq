@@ -707,3 +707,31 @@ On 2026-10-27, the user authorized proceeding with installation through the macO
 The app reopened successfully with its saved EQ enable preference off and Botaniq2 preserved. Startup diagnostics report **Bypassed**. The myEq virtual output remains available at 48 kHz, and ADAM Audio D3V remains the default media/system output at 48 kHz. No manual Core Audio reload or Mac restart was needed. Installed bridge checks pass authentication and reject wrong-protocol and unauthorized-role requests.
 
 The fresh silent playback probe exited with its expected inactive-route status 78 because EQ was bypassed; it did not change routing or enable EQ. Active-session transport counters, sustained audible webpage playback, and audio/video synchronization remain unverified. Enable EQ and replay the reported page to complete those checks.
+
+
+## Invalid or stale audio session investigation (0.5.7)
+
+On 2026-11-03, the user reported a background-worker failure with **Invalid or stale audio session.** Read-only inspection found installed 0.5.7/build 22 and the app, bridge, recovery helper, and driver host still running from 2026-10-27. Both helper launchd jobs report one run and no prior exit; both use Interactive process classification. These observations do not support a helper crash or the older Background-classification problem as the explanation for the current error. The saved EQ preference is enabled. The scoped seven-day macOS log query returned no myEq engine/helper events, so it does not identify when or why this session first ended. Earlier October 22 workload logs are separate incidents.
+
+Source inspection found a reproducible recovery classification defect:
+
+1. `Bridge.mm::revoke` disables the shared mapping, clears the active generation, and records `retiredGeneration` for recovery.
+2. An exact-generation heartbeat from the current paired owner receives a retryable expired-session response while that retirement is pending.
+3. Recovery restores defaults and acknowledges `settled`. The bridge then clears `retiredGeneration` to allow a new open.
+4. If the app's next heartbeat arrives after settlement, its same token reaches the generic **Invalid or stale audio session.** rejection with `retryable=false`.
+5. The native client forwards that flag. `SessionHeartbeat` latches the failure and stops polling; `StartupRetry` declines it, and `AudioEngine` sets `blocked=true`. The error persists until explicit Retry or another transition resets the engine.
+
+The app and recovery timers run independently at 250 ms, so completing restoration before the next app poll is a valid ordering. No wrong token, changed peer, or replacement session is needed to reproduce the permanent error. A transient lease expiry can therefore become a lasting error instead of the intended bounded reconnection. The same bridge gate can also obscure the recovery helper's manual-output or disconnected-output reason because the client checks the bridge before recovery status.
+
+An isolated native probe under `build/session-retirement-probe.mm` includes the production bridge handler, substitutes peer UID/audit identity and message delivery, creates an anonymous mapping, and executes revoke → heartbeat → settled → heartbeat. It compiles with Clang and exits successfully with:
+
+```text
+Before recovery settles: Audio session expired; recovery is settling. retryable=1
+After recovery settles: Invalid or stale audio session. retryable=0
+```
+
+The probe also asserts that the old mapping remains inactive with a zero deadline throughout. It does not contact installed Mach services or change audio routing. The existing native bridge lifecycle fixture passes, as do all ten selected Swift `StartupRetryTests` and `SessionHeartbeatTests`. Repository/documentation and whitespace checks pass. This confirms the source defect, not the precise ordering of the user's live incident. The identical message also exists in recovery's status handler for a nonzero, mismatched generation; the text alone cannot distinguish the two origins. Missed app/render deadlines (1.5 seconds), a missed recovery deadline (two seconds), ownership changes, and route changes remain possible initiating events without incident logs.
+
+A repair should separate pending restoration from the last ended session's owner/generation, preserve a typed end reason through settlement, and let only the matching authenticated owner reconnect with a fresh generation. It must retain rejection of unrelated/stale tokens, changed owners, and active replacement sessions; it must never revive the old mapping or extend an expired lease. Tests should cover both heartbeat/settlement orderings and manual output/disconnection reasons. Logging the revocation cause and heartbeat ages on every expiration path would make a recurrence attributable; the current early expiration branch in the heartbeat handler revokes without that diagnostic.
+
+This investigation changes troubleshooting and verification documentation only. No runtime fix or package installation is claimed.
