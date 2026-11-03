@@ -20,10 +20,14 @@ if [ "${1:-}" = "tsan" ]; then
   xcrun clang++ "${common[@]}" Tests/Native/SpectrumTests.mm -framework Foundation -o build/native-tests/spectrum-tsan
   xcrun clang++ "${common[@]}" Tests/Native/ConsoleUserTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/console-user-tsan
   xcrun clang++ "${common[@]}" Tests/Native/HeartbeatDelayTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/heartbeat-delay-tsan
+  xcrun clang++ "${common[@]}" Tests/Native/HeartbeatTests.mm Sources/CDSP/DSP.cpp -framework Foundation -framework CoreAudio -framework AudioToolbox -o build/native-tests/heartbeat-tsan
+  xcrun clang++ "${common[@]}" Tests/Native/BridgeLifecycleTests.mm -framework Foundation -framework SystemConfiguration -o build/native-tests/bridge-lifecycle-tsan
   xcrun clang++ "${common[@]}" Tests/Native/SecurityTests.mm -framework Foundation -framework SystemConfiguration -framework Security -o build/native-tests/security-tsan
   xcrun clang++ "${common[@]}" Tests/Native/RecoveryTests.mm -framework Foundation -framework CoreAudio -framework AppKit -framework SystemConfiguration -o build/native-tests/recovery-tsan
   build/native-tests/console-user-tsan
   build/native-tests/heartbeat-delay-tsan
+  build/native-tests/heartbeat-tsan
+  build/native-tests/bridge-lifecycle-tsan
   build/native-tests/security-tsan
   build/native-tests/recovery-tsan
   build/native-tests/spectrum-tsan

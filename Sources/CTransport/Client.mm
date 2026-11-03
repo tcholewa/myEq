@@ -122,11 +122,18 @@ extern "C" bool meq_prepare_buffers(MEQConnection *c,const char *uid,bool apply,
   auto r=request(c->state->recovery,m);
   if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
+static bool readEnded(xpc_object_t r,bool &ended,char *out,size_t size){
+  auto value=xpc_dictionary_get_value(r,"ended");
+  if(value&&xpc_get_type(value)!=XPC_TYPE_BOOL){copyError(out,size,"The audio bridge returned an invalid session status.");return false;}
+  ended=value&&xpc_bool_get_value(value);return true;
+}
 extern "C" bool meq_activate_route(MEQConnection *c,const char *uid,char *out,size_t size,bool *canRetry){
   *canRetry=false;
   // Buffer preparation may wait for HAL publication; start activation with a fresh app beat.
   auto renewed=request(c->state->bridge,sessionMessage("heartbeat",c->generation),0.5);
   if(!succeeded(renewed)){*canRetry=retryable(renewed);copyError(out,size,error(renewed));return false;}
+  bool ended=false;if(!readEnded(renewed,ended,out,size))return false;
+  if(ended){*canRetry=true;copyError(out,size,"Audio session ended during setup. Retry to reconnect.");return false;}
   auto m=sessionMessage("activate",c->generation);xpc_dictionary_set_string(m,"uid",uid);
   auto r=request(c->state->recovery,m);if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return false;}return true;
 }
@@ -147,13 +154,18 @@ extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRet
   // Never extend that deadline here; confirmed connection/authentication failures still stop.
   if(!r&&leaseStillLive(c))return 1;
   if(!succeeded(r)){*canRetry=retryable(r);copyError(out,size,error(r));return 0;}
+  bool ended=false;if(!readEnded(r,ended,out,size))return 0;
+  // An ended reply allows only an outcome read; it never makes the old session healthy.
   auto status=request(c->state->recovery,sessionMessage("status",c->generation),0.5);
   // Only absence of a reply is tolerated; the bridge independently enforces recovery freshness.
-  if(!status&&leaseStillLive(c))return 1;
+  if(!status&&!ended&&leaseStillLive(c))return 1;
   if(!succeeded(status)){*canRetry=retryable(status);copyError(out,size,error(status));return 0;}
   if(!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,"The recovery helper returned an invalid status.");return 0;}
   auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);
-  if(reason||!xpc_dictionary_get_bool(status,"active")){*canRetry=reason==1&&retryable(status);copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;}
+  if(reason||!xpc_dictionary_get_bool(status,"active")||ended){
+    *canRetry=(reason==1&&retryable(status))||(ended&&reason==0);
+    copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;
+  }
   return 1;
 }
 extern "C" void meq_close_transport(MEQConnection *c){

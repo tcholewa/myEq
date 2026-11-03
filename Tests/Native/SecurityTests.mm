@@ -34,9 +34,18 @@ static void runIPC(){
   dispatch_sync(queue,^{generation=42;memory=std::make_shared<Mapping>();assert(memory->create(48000,42));});
   assert(!succeeded(request(appClient,sessionMessage("close",41))));
   dispatch_sync(queue,^{assert(generation==42&&memory);});
+  assert(succeeded(request(appClient,sessionMessage("close",42))));
+  auto endedBefore=request(appClient,sessionMessage("heartbeat",42));
+  assert(succeeded(endedBefore)&&xpc_dictionary_get_bool(endedBefore,"ended"));
+  assert(succeeded(request(recoveryClient,sessionMessage("settled",42))));
+  auto endedAfter=request(appClient,sessionMessage("heartbeat",42));
+  assert(succeeded(endedAfter)&&xpc_dictionary_get_bool(endedAfter,"ended"));
+  assert(!succeeded(request(appClient,sessionMessage("heartbeat",41))));
+  dispatch_sync(queue,^{generation=43;memory=std::make_shared<Mapping>();assert(memory->create(48000,43));});
+  assert(!succeeded(request(appClient,sessionMessage("heartbeat",42))));
   // A request with no reply context must not run a mutating handler.
-  xpc_connection_send_message(appClient,sessionMessage("close",42));
-  assert(!succeeded(request(appClient,sessionMessage("heartbeat",42),1)));
+  xpc_connection_send_message(appClient,sessionMessage("close",43));
+  assert(!succeeded(request(appClient,sessionMessage("heartbeat",43),1)));
   // Disconnect revocation is expected; the service itself must remain usable.
   assert(succeeded(request(recoveryClient,message("status"))));
   xpc_connection_cancel(appClient);xpc_connection_cancel(recoveryClient);xpc_connection_cancel(listener);

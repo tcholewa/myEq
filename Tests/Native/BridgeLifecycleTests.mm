@@ -39,33 +39,70 @@ int main(){@autoreleasepool{
     assert(base+age<healthDeadline(base+age,base,base+age));
   assert(base+recoveryHealthNS==healthDeadline(base+recoveryHealthNS,base,base+recoveryHealthNS));
   assert(base+peerHealthNS==healthDeadline(base,base+peerHealthNS,base+peerHealthNS));
-  revoke();assert(detachMessages==0);
+  revokeSession();assert(detachMessages==0);
   generation=1;memory=std::make_shared<Mapping>();assert(memory->create(48000,1));
   auto prior=memory;
   handle(nullptr,"app",sessionMessage("close",1),message("reply"));
-  assert(memory==prior); // A stale/non-current peer cannot revoke this mapping.prior->s->active=1;prior->s->deadline=now()+NSEC_PER_SEC;
-  revoke();assert(detachMessages==1&&!memory&&!prior->s->active&&!prior->s->deadline);
+  assert(memory==prior); // A stale/non-current peer cannot revoke this mapping.
+  prior->s->active=1;prior->s->deadline=now()+NSEC_PER_SEC;
+  revokeSession();assert(detachMessages==1&&!memory&&!prior->s->active&&!prior->s->deadline);
   // Recovery restore, app close, and both disconnect events must not enqueue more HAL detaches.
-  for(int i=0;i<4;i++)revoke();
+  for(int i=0;i<4;i++)revokeSession();
   assert(detachMessages==1);
   generation=2;memory=std::make_shared<Mapping>();assert(memory->create(48000,2));
-  revoke();assert(detachMessages==2);
-  // Retired-session heartbeat is retryable only for the current paired owner.
+  revokeSession();assert(detachMessages==2);
+  // The same owner can read an ended outcome before or after restoration settles.
   appPeer=xpc_connection_create(nullptr,nullptr);recoveryPeer=xpc_connection_create(nullptr,nullptr);
   for(auto c:{appPeer,recoveryPeer}){xpc_connection_set_event_handler(c,^(xpc_object_t){});xpc_connection_resume(c);}
-  retiredGeneration=42;generation=0;
+  generation=42;sessionActive=true;memory=std::make_shared<Mapping>();assert(memory->create(48000,42));
+  auto endedMapping=memory;endedMapping->s->active=1;endedMapping->s->deadline=now()+NSEC_PER_SEC;
+  revokeSession();assert(retiredGeneration==42&&!generation&&!memory);
+  const int retirementDetaches=detachMessages;
+  auto checkEnded=[&]{
+    handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));
+    assert(succeeded(lastReply)&&xpc_dictionary_get_bool(lastReply,"ended"));
+    assert(!endedMapping->s->active.load()&&!endedMapping->s->deadline.load());
+    assert(detachMessages==retirementDetaches);
+  };
+  checkEnded();
+  handle(recoveryPeer,"recovery",sessionMessage("heartbeat",42),message("reply"));
+  assert(retryable(lastReply)); // Recovery still restores a revoked session.
+  handle(recoveryPeer,"recovery",sessionMessage("settled",41),message("reply"));assert(!succeeded(lastReply));
+  handle(recoveryPeer,"recovery",sessionMessage("settled",42),message("reply"));
+  assert(succeeded(lastReply)&&!retiredGeneration&&recoveryAvailable);
+  checkEnded();checkEnded(); // Settlement must not forget the app's ended generation.
+  handle(recoveryPeer,"recovery",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
+  auto invalid=sessionMessage("heartbeat",42);xpc_dictionary_set_bool(invalid,"extra",true);
+  handle(appPeer,"app",invalid,message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
   handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));
-  assert(lastReply&&retryable(lastReply));
+  assert(succeeded(lastReply));
   handle(appPeer,"app",sessionMessage("heartbeat",41),message("reply"));
-  assert(!retryable(lastReply));
+  assert(!succeeded(lastReply)&&!retryable(lastReply));
   foreignSession=recoveryPeer;assert(!paired());
-  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
   foreignSession=nullptr;consoleUID=502;consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);assert(!paired());
-  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
   consoleUID=501;consoleUser.state->publish(consoleUser.state->invalidate(),consoleUID);assert(paired());
+  auto originalApp=appPeer,originalRecovery=recoveryPeer;
+  auto replacement=xpc_connection_create(nullptr,nullptr);xpc_connection_set_event_handler(replacement,^(xpc_object_t){});xpc_connection_resume(replacement);
+  appPeer=replacement;
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
+  appPeer=originalApp;recoveryPeer=replacement;
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
+  recoveryPeer=originalRecovery;xpc_connection_cancel(replacement);
+  // An active replacement generation rejects the previous token and keeps its mapping intact.
   generation=43;
-  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!retryable(lastReply));
+  memory=std::make_shared<Mapping>();assert(memory->create(48000,43));auto replacementMapping=memory;
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply)&&memory==replacementMapping);
+  // First expiry observed by the app's heartbeat follows the same typed outcome path.
+  sessionActive=true;appBeat=now()-peerHealthNS;recoveryBeat=now();renderChanged=now();lastRender=0;
+  handle(appPeer,"app",sessionMessage("heartbeat",43),message("reply"));
+  assert(succeeded(lastReply)&&xpc_dictionary_get_bool(lastReply,"ended")&&!generation&&!memory);
+  handle(recoveryPeer,"recovery",sessionMessage("settled",43),message("reply"));assert(succeeded(lastReply));
+  handle(appPeer,"app",sessionMessage("heartbeat",42),message("reply"));assert(!succeeded(lastReply)&&!retryable(lastReply));
+  handle(appPeer,"app",sessionMessage("heartbeat",43),message("reply"));assert(succeeded(lastReply)&&xpc_dictionary_get_bool(lastReply,"ended"));
   for(auto c:{appPeer,recoveryPeer})xpc_connection_cancel(c);appPeer=nil;recoveryPeer=nil;generation=0;
+  forgetEnded();
   xpc_connection_cancel(driverPeer);driverPeer=nil;
 
   assert(retryable(nil)&&retryable(XPC_ERROR_CONNECTION_INTERRUPTED)&&retryable(XPC_ERROR_CONNECTION_INVALID));
@@ -78,5 +115,5 @@ int main(){@autoreleasepool{
   auto temporary=message("reply");xpc_dictionary_set_string(temporary,"error","Driver is connecting.");
   xpc_dictionary_set_bool(temporary,"retryable",true);
   assert(!succeeded(temporary)&&retryable(temporary));
-  std::cout<<"Bridge detach idempotence and temporary/permanent IPC failure classification passed\n";
+  std::cout<<"Bridge detach idempotence, ended-session ordering/ownership and IPC failure classification passed\n";
 }}

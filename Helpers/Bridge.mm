@@ -12,6 +12,8 @@ std::shared_ptr<Mapping> memory;
 uint64_t generation=0,appBeat=0,recoveryBeat=0,lastRender=0,renderChanged=0;
 bool sessionActive=false,recoveryAvailable=false;
 uint64_t retiredGeneration=0;
+uint64_t endedGeneration=0;
+xpc_connection_t endedApp,endedRecovery;
 size_t pendingPeers=0;
 struct Peer { std::string role;bool ready=false,pending=true;uint64_t deadline=now()+2*NSEC_PER_SEC; };
 void finishPending(const std::shared_ptr<Peer>& p){if(p->pending){p->pending=false;--pendingPeers;}}
@@ -26,11 +28,27 @@ bool owner(xpc_connection_t c,const std::string &role){
 bool paired(){return appPeer&&recoveryPeer&&foreground(appPeer)&&foreground(recoveryPeer)&&
   xpc_connection_get_euid(appPeer)==xpc_connection_get_euid(recoveryPeer)&&
   xpc_connection_get_asid(appPeer)==xpc_connection_get_asid(recoveryPeer);}
-void revoke(){
-  const auto old=generation;if(old){retiredGeneration=old;recoveryAvailable=false;}generation=0;sessionActive=false;
+void forgetEnded(){endedGeneration=0;endedApp=nil;endedRecovery=nil;}
+void revokeSession(const char *cause="requested"){
+  const auto old=generation;
+  if(old){
+    NSLog(@"myEq: bridge retired cause=%s paired=%d active=%d app=%llu recovery=%llu render=%llu ms",cause,paired(),sessionActive,(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);
+    retiredGeneration=old;recoveryAvailable=false;
+    // Settlement gates new opens; this separate record lets the old owner read its outcome.
+    endedGeneration=old;endedApp=appPeer;endedRecovery=recoveryPeer;
+  }
+  generation=0;sessionActive=false;
   if(memory){memory->s->active=0;memory->s->deadline=0;memory.reset();}
   if(old&&driverPeer)xpc_connection_send_message(driverPeer,sessionMessage("detach",old));
   if(old&&recoveryPeer)xpc_connection_send_message(recoveryPeer,sessionMessage("retired",old));
+}
+bool endedOwner(xpc_connection_t c,uint64_t token){
+  return !generation&&token&&token==endedGeneration&&c==endedApp&&
+    appPeer==endedApp&&recoveryPeer==endedRecovery&&paired();
+}
+void replyEnded(xpc_connection_t c,xpc_object_t r){
+  // A successful control reply is not a renewed lease or a healthy renderer.
+  xpc_dictionary_set_bool(r,"ended",true);sendReply(c,r);
 }
 void refresh(){if(driverPeer&&generation)xpc_connection_send_message(driverPeer,sessionMessage("refresh",generation));}
 void observeRender(){
@@ -59,18 +77,22 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
     uint64_t token;arc4random_buf(&token,sizeof(token));if(!token)token=1;
     auto next=std::make_shared<Mapping>();
     if(!next->create(rate,token)){sendReply(c,r,"Cannot allocate audio transport.");return;}
-    generation=token;appBeat=now();renderChanged=appBeat;lastRender=0;
+    forgetEnded();generation=token;appBeat=now();renderChanged=appBeat;lastRender=0;
     auto attach=sessionMessage("attach",token);xpc_dictionary_set_value(attach,"memory",next->object);
     xpc_dictionary_set_double(attach,"rate",rate);xpc_dictionary_set_string(attach,"outputName",xpc_dictionary_get_string(m,"outputName"));
     auto expectedDriver=driverPeer;
     requestAsync(driverPeer,attach,queue,3,^(xpc_object_t result){
       if(generation!=token||c!=appPeer||driverPeer!=expectedDriver||!paired()){
-        if(generation==token)revoke();sendReply(c,r,"Audio session was superseded.");return;
+        if(generation==token)revokeSession("attach-superseded");sendReply(c,r,"Audio session was superseded.");return;
       }
-      if(!succeeded(result)){revoke();sendReply(c,r,error(result).c_str(),retryable(result));return;}
+      if(!succeeded(result)){revokeSession("attach-failed");sendReply(c,r,error(result).c_str(),retryable(result));return;}
       memory=next;appBeat=now();renderChanged=appBeat;
       xpc_dictionary_set_uint64(r,"generation",token);xpc_dictionary_set_value(r,"memory",next->object);sendReply(c,r);
     });return;
+  }
+  if(role=="app"&&op=="heartbeat"&&sessionSchema(m,"heartbeat")&&
+     endedOwner(c,xpc_dictionary_get_uint64(m,"generation"))){
+    replyEnded(c,r);return;
   }
   if(op=="heartbeat"&&sessionSchema(m,"heartbeat")&&!generation&&retiredGeneration&&
      xpc_dictionary_get_uint64(m,"generation")==retiredGeneration&&paired()){
@@ -88,19 +110,20 @@ void handle(xpc_connection_t c,const std::string &role,xpc_object_t m,xpc_object
   if(op=="heartbeat"){
     observeRender();
     if(sessionActive&&expired()){
-      revoke();sendReply(c,r,"Audio session expired; recovery is settling.",true);return;
+      revokeSession("heartbeat-expired");
+      if(role=="app")replyEnded(c,r);else sendReply(c,r,"Audio session expired; recovery is settling.",true);return;
     }
     if(role=="app")appBeat=now();else recoveryBeat=now();
     if(memory&&sessionActive){
       observeRender();
       if(expired()){
-        NSLog(@"myEq: bridge heartbeat expired app=%llu recovery=%llu render=%llu ms",(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);
-        revoke();sendReply(c,r,"Audio session stopped; ordinary playback is being restored.",true);return;}
+        revokeSession("heartbeat-expired");
+        if(role=="app")replyEnded(c,r);else sendReply(c,r,"Audio session stopped; ordinary playback is being restored.",true);return;}
       renew();
     }
     sendReply(c,r);return;
   }
-  if((op=="close"&&role=="app")||(op=="deactivate"&&role=="recovery")){revoke();sendReply(c,r);return;}
+  if((op=="close"&&role=="app")||(op=="deactivate"&&role=="recovery")){revokeSession(role=="app"?"app-close":"recovery-deactivate");sendReply(c,r);return;}
   sendReply(c,r,"Unknown bridge operation.");
 }
 void acceptPeer(xpc_connection_t c,std::string appRequirement=requirement(@"app"),std::string recoveryRequirement=requirement(@"recovery")){
@@ -112,9 +135,9 @@ void acceptPeer(xpc_connection_t c,std::string appRequirement=requirement(@"app"
   serialEvents(c,queue,^(xpc_object_t m){
     if(xpc_get_type(m)==XPC_TYPE_ERROR){
       finishPending(p);
-      if(c==driverPeer){driverPeer=nil;revoke();}
-      if(c==appPeer){appPeer=nil;revoke();}
-      if(c==recoveryPeer){recoveryPeer=nil;recoveryAvailable=false;revoke();}return;
+      if(c==driverPeer){driverPeer=nil;revokeSession("driver-disconnected");}
+      if(c==appPeer){appPeer=nil;revokeSession("app-disconnected");forgetEnded();}
+      if(c==recoveryPeer){recoveryPeer=nil;recoveryAvailable=false;revokeSession("recovery-disconnected");forgetEnded();}return;
     }
     if(!p->ready&&now()>=p->deadline){finishPending(p);xpc_connection_cancel(c);return;}
     if(!p->pending&&!p->ready){xpc_connection_cancel(c);return;}
@@ -134,9 +157,9 @@ void acceptPeer(xpc_connection_t c,std::string appRequirement=requirement(@"app"
       if(existing&&existing!=c){
         // Never treat a recycled PID as authority to replace a live peer.
         if(p->role=="driver"||foreground(existing)){sendReply(c,r,"Another instance is connected.",true);finishPending(p);xpc_connection_cancel(c);return;}
-        revoke();xpc_connection_cancel(existing);
+        revokeSession("owner-replaced");xpc_connection_cancel(existing);
       }
-      if(p->role=="driver")driverPeer=c;else if(p->role=="app")appPeer=c;else {recoveryPeer=c;recoveryAvailable=false;}
+      if(p->role=="driver")driverPeer=c;else if(p->role=="app"){forgetEnded();appPeer=c;}else {forgetEnded();recoveryPeer=c;recoveryAvailable=false;}
       p->ready=true;finishPending(p);sendReply(c,r);return;
     }
     handle(c,p->role,m,r);
@@ -155,7 +178,7 @@ int main(){@autoreleasepool{
     observeRender();
     if(generation&&(!paired()||(!sessionActive&&now()-appBeat>4*NSEC_PER_SEC)||
        (sessionActive&&(expired())))){
-      NSLog(@"myEq: bridge revoked paired=%d app=%llu recovery=%llu render=%llu ms",paired(),(now()-appBeat)/NSEC_PER_MSEC,(now()-recoveryBeat)/NSEC_PER_MSEC,(now()-renderChanged)/NSEC_PER_MSEC);revoke();
+      revokeSession(!paired()?"ownership-lost":!sessionActive?"startup-timeout":"health-expired");
     }else if(sessionActive)renew();
   });dispatch_resume(timer);dispatch_main();
 }}

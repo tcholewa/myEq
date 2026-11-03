@@ -48,7 +48,7 @@ Check that the background helper is allowed in System Settings, then use **Retry
 
 This message means a helper rejected the audio session's generation or ownership. It does not by itself establish that a background process crashed. Use **Retry** to start a fresh session; if the error returns, note the time and whether it followed an output change, sleep/wake, screen lock, or heavy CPU work.
 
-An isolated source test confirmed a recovery-ordering defect in 0.5.7: when restoration finishes before the app's next heartbeat, the bridge forgets the retired generation and returns this error as permanent. The app then stops automatic reconnection. The reported incident's initiating event remains unconfirmed; see the [investigation and verification limits](VERIFICATION.md#invalid-or-stale-audio-session-investigation-057).
+Version 0.5.8 fixes a recovery-ordering defect in 0.5.7: when restoration finished before the app's next heartbeat, the bridge forgot the retired generation and returned this error as permanent. The bridge now retains an ended-session record for the same authenticated peers and exact token until a new session opens or either peer changes. The app reads recovery's outcome and applies bounded reconnection, manual bypass, or output fallback as appropriate. The old audio mapping stays revoked. Install the complete matching package; see the [fix verification](VERIFICATION.md#058-session-recovery-after-restoration) and [original investigation](VERIFICATION.md#invalid-or-stale-audio-session-investigation-057).
 
 ### Helper disconnect after screen lock
 

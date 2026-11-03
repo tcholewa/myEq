@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.7 (build 22)** adapts audio buffering to observed delivery bursts, addressing repeated underruns when a browser supplies larger batches than the virtual device’s reported buffer size. Regular 512-frame delivery retains its 1024-frame reserve; larger bursts can increase delay. Diagnostics distinguish buffer shortages from converter failures. See [adaptive buffering verification](docs/VERIFICATION.md#057-adaptive-browser-audio-buffering).
+Version **0.5.8 (build 23)** fixes a session-recovery race that could leave EQ stuck at **Invalid or stale audio session** after restoration finished before the app's next heartbeat. Temporary interruptions use the existing bounded retries; manual output selection stays bypassed and disconnected outputs allow fallback. See [recovery verification](docs/VERIFICATION.md#058-session-recovery-after-restoration). Adaptive browser audio buffering from 0.5.7 is retained.
 
 ## Screenshots
 
