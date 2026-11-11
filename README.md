@@ -10,7 +10,7 @@ A native macOS menu bar equalizer for your system's mixed stereo output. Shape y
 
 **Apple Silicon · macOS 27+ · MIT licensed**
 
-Version **0.5.8 (build 23)** fixes a session-recovery race that could leave EQ stuck at **Invalid or stale audio session** after restoration finished before the app's next heartbeat. Temporary interruptions use the existing bounded retries; manual output selection stays bypassed and disconnected outputs allow fallback. See [recovery verification](docs/VERIFICATION.md#058-session-recovery-after-restoration). Adaptive browser audio buffering from 0.5.7 is retained.
+Version **0.5.9 (build 24)** makes the menu bar icon reflect the engine state: full opacity while equalizing, slightly reduced while starting or reconnecting, and dimmed whenever the EQ is not processing audio. The 0.5.8 session-recovery fix and adaptive browser audio buffering from 0.5.7 are retained. See [icon verification](docs/VERIFICATION.md#status-aware-menu-bar-icon-2026-11-11).
 
 ## Screenshots
 
