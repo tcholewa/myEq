@@ -26,6 +26,7 @@ Main groups retain 18 pt spacing. Your sound uses 15 pt padding, 10 pt internal 
 
 ## Interaction
 
+- The menu bar icon itself reflects the engine state: full opacity while equalizing, slightly reduced while starting or reconnecting, and dimmed to about a third opacity whenever the EQ is not processing audio (bypassed, suspended, or an error needs attention). Every variant is a template image, so it adapts to light and dark menu bars; `Studio.statusIcon(for:)` renders the three opacities once and reuses them. The tooltip and accessibility label continue to spell out the state title.
 - Power, output selection, preset selection, recovery and Options retain their existing actions. Output and preset selectors open anchored native menus with selection checkmarks, arrow navigation and type-to-select.
 - Open equalizer closes the panel and activates the editor; its existing ⌘⇧E shortcut is retained. The shared button style provides pressed feedback without scale or movement.
 - Options contains Launch at Login and Background Items. Quit retains ⌘Q and the existing shutdown path.

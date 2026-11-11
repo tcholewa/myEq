@@ -13,27 +13,49 @@ enum Studio {
   static let combinedResponse = ink.opacity(0.64)
   static let combinedResponseWidth: CGFloat = 1.35
   static let line = Color.white.opacity(0.075)
-  static let statusIcon: NSImage = {
+  // The menu bar icon reflects the engine state: full opacity while
+  // equalizing, slightly reduced while reconnecting, and dimmed whenever the
+  // EQ is not processing audio. Every variant stays a template image so it
+  // adapts to light and dark menu bars.
+  private static let fullStatusIcon = makeStatusIcon(alpha: 1.0)
+  private static let connectingStatusIcon = makeStatusIcon(alpha: 0.85)
+  private static let dimStatusIcon = makeStatusIcon(alpha: 0.35)
+
+  static func statusIcon(for state: AudioEngineState) -> NSImage {
+    switch state {
+    case .running: return fullStatusIcon
+    case .starting, .reconnecting: return connectingStatusIcon
+    case .bypassed, .suspended, .error: return dimStatusIcon
+    }
+  }
+
+  // Each stem and thumb is appended to one path and filled in a single
+  // operation, so partial opacity stays uniform where the shapes overlap.
+  private static func makeStatusIcon(alpha: CGFloat) -> NSImage {
+    let color = NSColor.black.withAlphaComponent(alpha)
     let image = NSImage(size: NSSize(width: 20, height: 18), flipped: false) { _ in
-      NSColor.black.setStroke()
-      NSColor.black.setFill()
+      color.setStroke()
+      color.setFill()
+      let glyph = NSBezierPath()
       for (x, y) in [(4.0, 11.0), (10.0, 6.0), (16.0, 9.0)] {
-        let stem = NSBezierPath()
-        stem.lineWidth = 1.2
-        stem.lineCapStyle = .round
-        stem.move(to: NSPoint(x: x, y: 3))
-        stem.line(to: NSPoint(x: x, y: 15))
-        stem.stroke()
-        NSBezierPath(
-          roundedRect: NSRect(x: x - 2.5, y: y - 1.2, width: 5, height: 2.4),
-          xRadius: 0.9, yRadius: 0.9
-        ).fill()
+        // A round-capped 1.2-point stroke equals this capsule.
+        glyph.append(
+          NSBezierPath(
+            roundedRect: NSRect(x: x - 0.6, y: 2.4, width: 1.2, height: 13.2),
+            xRadius: 0.6, yRadius: 0.6
+          ))
+        glyph.append(
+          NSBezierPath(
+            roundedRect: NSRect(x: x - 2.5, y: y - 1.2, width: 5, height: 2.4),
+            xRadius: 0.9, yRadius: 0.9
+          ))
       }
+      glyph.fill()
       return true
     }
     image.isTemplate = true
     return image
-  }()
+  }
 
   static func statusColor(_ state: AudioEngineState) -> Color {
     switch state {
