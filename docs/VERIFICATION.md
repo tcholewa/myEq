@@ -778,3 +778,16 @@ On 2026-11-11, the user requested installation of the status-aware menu bar icon
 `bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, XPC trust identities, recovery launch constraints, version consistency, icon, notices, and installer-script checks. `python3 scripts/test-installer-security.py` passed the unprivileged upgrade/rollback/uninstall and hostile-path/signature fixtures under AddressSanitizer/UndefinedBehaviorSanitizer. Repository/documentation checks and whitespace checks pass.
 
 Package: `dist/myEq.pkg`, SHA-256 `448a6cf8a4a9b254cb0acc6a31fa9dc12609a5164ece5604b01db571af1ae044`. This local development package remains ad-hoc signed and unnotarized. Installed upgrade results are recorded separately below.
+
+
+### 0.5.9 installed upgrade and live icon check
+
+On 2026-11-11, the user authorized installing the verified package through the macOS administrator prompt. Neither myEq nor Music was running at installation start. The receipt reports 0.5.9, the installed app reports build 24, its executable SHA-256 matches the candidate, and all five installed component signatures match the installed trust manifest with fresh installation UUID `7FB63DF1-EE06-4B2B-97FC-4B3F40BFAACC`. Implementation commit `90fddcd` and release commit `249b6e9` were pushed to `origin/master`; hosted CI for `249b6e9` was still running at recording time.
+
+The installer kept Core Audio running because driver/bridge identities were unchanged, and the myEq virtual output remained enumerated after the upgrade with ADAM Audio D3V as the physical output. No manual Core Audio reload or Mac restart was needed.
+
+First launch again hit the known cached recovery-helper launch constraint: the helper exited `EX_CONFIG` (78) despite matching signatures and the app's registration refresh to the fresh installation UUID. Quitting myEq, refreshing its LaunchServices registration with `lsregister -f`, deleting only the `recoveryRegistrationID` preference, and reopening triggered a fresh ServiceManagement registration; the recovery helper then ran under parent bundle version 24 with no exit. No signature or ownership check was relaxed. This repeats the documented ad-hoc upgrade limitation.
+
+The installed bridge authentication probe passed, rejecting the wrong protocol and every unauthorized role. Saved settings were preserved (EQ enabled, Botaniq2). Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (70), and 96 kHz (139), preserving the default virtual output. These checks establish startup and transport, not sustained-load behavior.
+
+The user then visually confirmed the new menu bar icon on the installed app: full opacity while equalizing, clearly dimmed after bypassing with ⌘E, and returning to full opacity when re-enabled. This is a positive user check of the status-aware icon; automated VoiceOver reading of the state tooltip and light/dark menu bar adaptation were not separately exercised.
