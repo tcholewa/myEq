@@ -800,3 +800,12 @@ Live logs from 2026-11-22 at 11:09:23 showed macOS Bluetooth Smart Routing (`aud
 `myEqRecovery` now distinguishes selecting the physical target directly (`reason = 2`, explicit manual bypass) from switching macOS default output to a different device while the physical target remains connected (`reason = 4`, external output switch), and accepts idempotent `restore` requests for the just-retired generation without cancelling the app XPC connection. `Client.mm` forwards reason `4` through `meq_heartbeat`. `AudioEngine` enters `ExternalRouteBypass` (`state = .bypassed`) while preserving `enabled = true` and `preferredOutputUID`, and automatically resumes EQ once macOS returns default output to the target device. Explicitly toggling EQ off or selecting an output in `myEq` clears the temporary bypass.
 
 Verification: all **49 Swift tests** pass (including `testExternalRouteBypassResumesWhenTargetReturns`), native tests pass normally and under AddressSanitizer/UndefinedBehaviorSanitizer and ThreadSanitizer (including `reason = 2/3/4` classification in `RecoveryTests` and `reason = 4` forwarding in `HeartbeatTests`), strict `swift-format` lint passes, Clang static analysis passes, repository/documentation link checks and `git diff --check` pass, and `bash scripts/build.sh` built and signature-verified `build/artifacts.noindex/myEq.app`. The installed 0.5.9 app was not replaced yet; packaging/installing and live ADAM Audio ↔ Bluetooth switching remain to be verified after installation.
+
+
+## 0.5.10 release verification
+
+On 2026-11-22, the user requested packaging and installing the external-output bypass and auto-resume fix. Version 0.5.10/build 25 packages the verified implementation from `0c27e01`.
+
+`bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, XPC trust identities, recovery launch constraints, version consistency, icon, notices, and installer-script checks. `python3 scripts/test-installer-security.py` passed the unprivileged upgrade/rollback/uninstall and hostile-path/signature fixtures under AddressSanitizer/UndefinedBehaviorSanitizer. Repository/documentation checks and whitespace checks pass.
+
+Package: `dist/myEq.pkg`, SHA-256 `64ee23dcdf51acdc0e3a2178ebe471ceaea5bf9010658ee545212359eb2b2a63`. This local development package remains ad-hoc signed and unnotarized. Installed upgrade results are recorded separately below.
