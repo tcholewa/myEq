@@ -809,3 +809,12 @@ On 2026-11-22, the user requested packaging and installing the external-output b
 `bash scripts/build-installer.sh` built the Release package. `python3 scripts/verify-installer.py` passed component signatures, XPC trust identities, recovery launch constraints, version consistency, icon, notices, and installer-script checks. `python3 scripts/test-installer-security.py` passed the unprivileged upgrade/rollback/uninstall and hostile-path/signature fixtures under AddressSanitizer/UndefinedBehaviorSanitizer. Repository/documentation checks and whitespace checks pass.
 
 Package: `dist/myEq.pkg`, SHA-256 `64ee23dcdf51acdc0e3a2178ebe471ceaea5bf9010658ee545212359eb2b2a63`. This local development package remains ad-hoc signed and unnotarized. Installed upgrade results are recorded separately below.
+
+
+### 0.5.10 installed upgrade and playback probe
+
+On 2026-11-22, the user authorized installing the verified 0.5.10 package through the macOS administrator prompt while neither myEq nor Music was running. Implementation commit `0c27e01` and release commit `354caa3` were pushed to `origin/master`. The receipt reports 0.5.10, the installed app reports build 25, its executable SHA-256 (`e800fa6e8bc3dea4dc8e72211524de46f2269c32ec3a23a7dcfd18693f5ddd1b`) matches the candidate, and all installed component signatures verify against the trust manifest with fresh installation UUID `94812B23-03DA-4A72-ABB3-6B196893F95B`.
+
+Replacing the driver bundle unloaded `myEq.driver` while Core Audio remained running, and first launch hit the known cached recovery-helper launch constraint (`OS_REASON_CODESIGNING`). Quitting myEq, refreshing its LaunchServices entry with `lsregister -f`, deleting only the `recoveryRegistrationID` preference, reloading Core Audio via administrator-authorized `killall -TERM coreaudiod`, and reopening `/Applications/myEq.app` resolved both: `myEqRecovery` ran under parent bundle version 25 with no exit, `myEq.driver` loaded, and `myEq` reached **Equalizing** on `myEq: ADAM Audio D3V` (48 kHz, 512-frame source/output buffers, 1024-frame reserve).
+
+The installed bridge authentication probe passed, rejecting the wrong protocol and every unauthorized role. Fresh silent AudioQueue clients passed at 44.1 kHz (64 callbacks), 48 kHz (70), and 96 kHz (140), preserving both virtual defaults with zero underruns, overruns, or converter errors. Live ADAM Audio ↔ Bluetooth/AirPods switching on the installed 0.5.10 build remains to be exercised by the user.
