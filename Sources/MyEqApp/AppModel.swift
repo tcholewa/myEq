@@ -303,12 +303,12 @@ final class AppModel: ObservableObject {
       }
     } catch { message = "Could not change launch at login: \(error.localizedDescription)" }
   }
-  private func changed() {
+  private func changed(retry: Bool = false) {
     guard saved.isValid else { return }
     if !previewMode && isInstalledApp && (!preparingRecovery || !saved.enabled) {
       engine.configure(
         preset: saved.current, enabled: saved.enabled && recoveryReady,
-        outputUID: saved.preferredOutputUID)
+        outputUID: saved.preferredOutputUID, retry: retry)
     }
     refreshGraph()
     saveWork?.cancel()
@@ -350,7 +350,7 @@ final class AppModel: ObservableObject {
   }
   func selectOutput(_ uid: String) {
     saved.preferredOutputUID = uid
-    changed()
+    changed(retry: true)
   }
   func showAudioSetup() {
     SMAppService.openSystemSettingsLoginItems()

@@ -45,6 +45,7 @@ public final class AudioEngine {
   private var sleeping = false
   private var loginEligible: Bool?
   private var reconnecting = false
+  private var externalBypass = ExternalRouteBypass()
   private var startupRetry = StartupRetry()
   private var blocked = false
   private var closing = false
@@ -96,6 +97,7 @@ public final class AudioEngine {
       if toggled { self.bufferPolicyUIDs.removeAll() }
       self.preferredOutputUID = outputUID
       if toggled || retry {
+        self.externalBypass.clear()
         self.blocked = false
         self.startupRetry.reset()
         self.reconnecting = false
@@ -194,7 +196,7 @@ public final class AudioEngine {
       if sleeping || !eligible {
         stop()
         snapshot.state =
-          enabled
+          enabled && !externalBypass.isActive
           ? .suspended(
             sleeping ? "Mac is sleeping." : "This login session is inactive.") : .bypassed
         return
@@ -218,24 +220,42 @@ public final class AudioEngine {
         let health = try session.heartbeat()
         if health == 2 {
           enabled = false
+          externalBypass.clear()
           stop()
           preferredOutputUID = nil
           manuallyBypassed = true
         } else if health == 3 {
+          externalBypass.clear()
           stop()
           preferredOutputUID = nil
+        } else if health == 4 {
+          let targetUID = route?.uid ?? preferredOutputUID
+          stop()
+          if let targetUID {
+            externalBypass.engage(targetUID: targetUID)
+            logger.notice("External output selected; bypassing EQ until target output returns")
+          }
         }
       }
       let system = try OutputRoute.current()
+      if enabled
+        && externalBypass.shouldResume(
+          systemDefaultUID: system?.uid, availableUIDs: Set(all.map(\.uid)))
+      {
+        logger.notice("Target output restored as macOS default; resuming EQ")
+        blocked = false
+        startupRetry.reset()
+        reconnecting = false
+      }
       let selected = all.first { $0.uid == preferredOutputUID }
       let current = selected ?? (system?.physical == true ? system : nil) ?? all.first
-      if let current, preferredOutputUID != current.uid {
+      if !externalBypass.isActive, let current, preferredOutputUID != current.uid {
         preferredOutputUID = current.uid
         let uid = current.uid
         DispatchQueue.main.async { [weak self] in self?.onSelectedOutput?(uid) }
       }
       if manuallyBypassed { DispatchQueue.main.async { [weak self] in self?.onBypass?() } }
-      snapshot.selectedOutputUID = current?.uid
+      snapshot.selectedOutputUID = externalBypass.targetUID ?? current?.uid
       if route != current {
         if let previous = route, let current {
           logger.notice(
@@ -252,7 +272,7 @@ public final class AudioEngine {
       }
       snapshot.outputName = current?.name ?? "No output connected"
       snapshot.sampleRate = current?.rate ?? 48000
-      if !enabled {
+      if !enabled || externalBypass.isActive {
         startupRetry.reset()
         stop()
         snapshot.state = .bypassed
@@ -371,5 +391,28 @@ struct StartupRetry {
 enum LoginEligibility {
   static func allows(uid: UInt32?, onConsole: Bool?, loginDone: Bool?, ownUID: UInt32) -> Bool {
     ownUID >= 500 && uid == ownUID && onConsole == true && loginDone == true
+  }
+}
+
+/// Temporarily bypasses EQ when macOS switches default output away from the active target
+/// (e.g. Bluetooth headphones/AirPods) and resumes when macOS returns to that target.
+struct ExternalRouteBypass: Equatable {
+  private(set) var targetUID: String?
+
+  var isActive: Bool { targetUID != nil }
+
+  mutating func engage(targetUID: String) {
+    self.targetUID = targetUID
+  }
+
+  mutating func clear() {
+    targetUID = nil
+  }
+
+  mutating func shouldResume(systemDefaultUID: String?, availableUIDs: Set<String>) -> Bool {
+    guard let targetUID else { return false }
+    guard systemDefaultUID == targetUID, availableUIDs.contains(targetUID) else { return false }
+    self.targetUID = nil
+    return true
   }
 }

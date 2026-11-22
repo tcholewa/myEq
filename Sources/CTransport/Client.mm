@@ -161,7 +161,7 @@ extern "C" int meq_heartbeat(MEQConnection *c,char *out,size_t size,bool *canRet
   if(!status&&!ended&&leaseStillLive(c))return 1;
   if(!succeeded(status)){*canRetry=retryable(status);copyError(out,size,error(status));return 0;}
   if(!xpc_dictionary_get_value(status,"reason")||xpc_get_type(xpc_dictionary_get_value(status,"reason"))!=XPC_TYPE_INT64||!xpc_dictionary_get_value(status,"active")||xpc_get_type(xpc_dictionary_get_value(status,"active"))!=XPC_TYPE_BOOL){copyError(out,size,"The recovery helper returned an invalid status.");return 0;}
-  auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3)return int(reason);
+  auto reason=xpc_dictionary_get_int64(status,"reason");if(reason==2||reason==3||reason==4)return int(reason);
   if(reason||!xpc_dictionary_get_bool(status,"active")||ended){
     *canRetry=(reason==1&&retryable(status))||(ended&&reason==0);
     copyError(out,size,"Audio recovery restored ordinary playback. Retry to reconnect.");return 0;

@@ -143,6 +143,34 @@ int main(){@autoreleasepool{
   });
   dispatch_semaphore_signal(gate);dispatch_sync(halQueue,^{});dispatch_sync(queue,^{});
   assert(!active&&pendingRPCs.empty());
+  // Switching macOS default output to a different device (e.g. Bluetooth) reports reason 4;
+  // selecting the physical target itself reports reason 2; disconnect still reports reason 3.
+  mockDevices[6]={"bt",true,kAudioDeviceTransportTypeBluetooth};
+  target="usb";oldAlerts="alerts";mockDevices[3].alive=true;mockDevices[5].alive=true;
+  auto pollRoute=[&](UInt32 nextMedia,bool targetAlive,uint64_t gen){
+    pendingRPCs.clear();mockDevices[3].alive=targetAlive;media=nextMedia;alerts=2;
+    active=true;activating=false;generation=gen;lastGeneration=0;reason=0;
+    routePollPending=false;heartbeatPending=true;bridgeLastReply=now();
+    dispatch_sync(queue,^{tick();});
+    dispatch_sync(halQueue,^{});
+    dispatch_sync(queue,^{});
+  };
+  pollRoute(6,true,23);
+  assert(!active&&reason==4&&generation==0&&lastGeneration==23);
+  completeRPC("deactivate",response(0,23));completeRPC("status",response(0,23));
+  assert(media==6&&alerts==5); // Preserves Bluetooth media default while restoring alerts.
+  completeRPC("settled",response(0,23));assert(settled);
+  pollRoute(3,true,24);
+  assert(!active&&reason==2&&generation==0&&lastGeneration==24);
+  completeRPC("deactivate",response(0,24));completeRPC("status",response(0,24));
+  assert(media==3&&alerts==5);
+  completeRPC("settled",response(0,24));assert(settled);
+  pollRoute(2,false,25);
+  assert(!active&&reason==3&&generation==0&&lastGeneration==25);
+  completeRPC("deactivate",response(0,25));completeRPC("status",response(0,25));
+  assert(media==4&&alerts==5);
+  completeRPC("settled",response(0,25));assert(settled);
+  mockDevices[3].alive=true;
   xpc_connection_cancel(app);app=nil;
   xpc_connection_cancel(bridge);bridge=nil;
   [[NSFileManager defaultManager] removeItemAtPath:journal.stringByDeletingLastPathComponent error:nil];

@@ -134,7 +134,7 @@ final class VirtualOutputSession {
       throw error
     }
   }
-  /// 1 healthy, 2 manual output selection, 3 disconnected destination.
+  /// 1 healthy, 2 manual target bypass, 3 disconnected destination, 4 external output selected.
   func heartbeat() throws -> Int {
     guard let sessionHeartbeat else {
       throw AudioFailure(message: "Audio heartbeat is not running.")

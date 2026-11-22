@@ -39,4 +39,29 @@ final class RouteTests: XCTestCase {
         isBluetooth: false, microphoneActive: false, channels: 2, sampleRate: .nan,
         supportedTransport: true, supportedFormat: true))
   }
+  func testExternalRouteBypassResumesWhenTargetReturns() {
+    var bypass = ExternalRouteBypass()
+    XCTAssertFalse(bypass.isActive)
+    XCTAssertFalse(bypass.shouldResume(systemDefaultUID: "adam", availableUIDs: ["adam", "bt"]))
+
+    bypass.engage(targetUID: "adam")
+    XCTAssertTrue(bypass.isActive)
+    XCTAssertEqual(bypass.targetUID, "adam")
+    // Stay bypassed while macOS routes to Bluetooth, another device, or an absent target.
+    XCTAssertFalse(bypass.shouldResume(systemDefaultUID: "bt", availableUIDs: ["adam", "bt"]))
+    XCTAssertFalse(bypass.shouldResume(systemDefaultUID: nil, availableUIDs: ["adam", "bt"]))
+    XCTAssertFalse(bypass.shouldResume(systemDefaultUID: "adam", availableUIDs: ["bt"]))
+    XCTAssertTrue(bypass.isActive)
+
+    // Resume automatically once macOS returns default output to the target device.
+    XCTAssertTrue(bypass.shouldResume(systemDefaultUID: "adam", availableUIDs: ["adam", "bt"]))
+    XCTAssertFalse(bypass.isActive)
+    XCTAssertNil(bypass.targetUID)
+
+    // Explicit clear (e.g. manual off or output selection in myEq) prevents auto-resume.
+    bypass.engage(targetUID: "adam")
+    bypass.clear()
+    XCTAssertFalse(bypass.isActive)
+    XCTAssertFalse(bypass.shouldResume(systemDefaultUID: "adam", availableUIDs: ["adam", "bt"]))
+  }
 }

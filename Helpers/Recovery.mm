@@ -21,7 +21,7 @@ bool recoveryRetryable=false;
 id activity;
 void beginActivity(){if(!activity)activity=[[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep reason:@"Maintaining system audio recovery"];}
 void endActivity(){if(activity){[[NSProcessInfo processInfo] endActivity:activity];activity=nil;}}
-uint64_t generation=0,epoch=0;
+uint64_t generation=0,lastGeneration=0,epoch=0;
 std::string target,oldAlerts;
 NSString *journal;
 struct BufferChange {std::string uid;uint32_t original,applied;};
@@ -122,7 +122,8 @@ bool restoreDefaults(){
 void reconcile();
 void restore(){
   NSLog(@"myEq: recovery restore reason=%d retryable=%d",reason,recoveryRetryable);
-  const auto old=generation;settled=false;++epoch;active=false;activating=false;checking=false;heartbeatPending=false;routePollPending=false;generation=0;
+  const auto old=generation;if(old)lastGeneration=old;
+  settled=false;++epoch;active=false;activating=false;checking=false;heartbeatPending=false;routePollPending=false;generation=0;
   if(bridgeReady&&old){auto c=bridge;requestAsync(c,sessionMessage("deactivate",old),queue,0.5,^(xpc_object_t){if(c==bridge)reconcile();});}
   else reconcile();
 }
@@ -171,7 +172,8 @@ void connectBridge(){
     if(xpc_get_type(m)==XPC_TYPE_ERROR&&bridge==c){
     NSLog(@"myEq: recovery bridge event: %s",error(m).c_str());
     recoveryRetryable=retryable(m);reason=1;endActivity();
-    bridge=nil;bridgeReady=false;settled=false;connecting=false;checking=false;heartbeatPending=false;routePollPending=false;++epoch;active=false;activating=false;generation=0;
+    if(restorePeer){sendReply(restorePeer,restoreResponse,"Audio bridge disconnected.",true);restorePeer=nil;restoreResponse=nil;}
+    bridge=nil;bridgeReady=false;settled=false;connecting=false;checking=false;heartbeatPending=false;routePollPending=false;++epoch;active=false;activating=false;generation=0;lastGeneration=0;
   }});
   xpc_connection_resume(c);auto hello=message("hello");xpc_dictionary_set_string(hello,"role","recovery");
   requestAsync(c,hello,queue,1,^(xpc_object_t r){
@@ -206,7 +208,7 @@ void prepareBuffers(xpc_connection_t c,xpc_object_t m,xpc_object_t response){
     if(!owner(c)||!succeeded(result)||xpc_dictionary_get_uint64(result,"generation")!=requested){sendReply(c,response,"Buffer preparation lost session ownership.",true);return;}
     auto selected=find(destination),virtualID=find(deviceUID);
     if(!physical(selected)||!virtualID){sendReply(c,response,"Select a connected physical output.");return;}
-    generation=requested;preparedAt=now();target=destination;settled=false;
+    generation=requested;lastGeneration=0;preparedAt=now();target=destination;settled=false;
     oldAlerts=uid(current(kAudioHardwarePropertyDefaultSystemOutputDevice));if(oldAlerts==deviceUID)oldAlerts=target;
     if(!saveJournal()){sendReply(c,response,"Cannot save buffer recovery journal.");restore();return;}
     uint32_t frames=0;
@@ -246,8 +248,12 @@ void tick(){
     if(!routePollPending){
       routePollPending=true;const auto attempt=epoch;const auto destination=target;
       dispatch_async(halQueue,^{
-        const int result=!physical(find(destination))?3:
-          (uid(current(kAudioHardwarePropertyDefaultOutputDevice))!=deviceUID?2:0);
+        int result=0;
+        if(!physical(find(destination)))result=3;
+        else{
+          auto mediaUID=uid(current(kAudioHardwarePropertyDefaultOutputDevice));
+          if(mediaUID!=deviceUID)result=mediaUID==destination?2:4;
+        }
         dispatch_async(queue,^{
           if(attempt!=epoch)return;
           routePollPending=false;
@@ -275,7 +281,7 @@ void acceptPeer(xpc_connection_t c){
   if(pendingPeers>=32){xpc_connection_cancel(c);return;}++pendingPeers;auto p=std::make_shared<Peer>();
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),queue,^{if(!p->ready){finishPending(p);xpc_connection_cancel(c);}});
   serialEvents(c,queue,^(xpc_object_t m){
-    if(xpc_get_type(m)==XPC_TYPE_ERROR){finishPending(p);if(app==c){app=nil;reason=1;recoveryRetryable=retryable(m);restore();}return;}
+    if(xpc_get_type(m)==XPC_TYPE_ERROR){finishPending(p);if(restorePeer==c){restorePeer=nil;restoreResponse=nil;}if(app==c){app=nil;lastGeneration=0;reason=1;recoveryRetryable=retryable(m);restore();}return;}
     if(!p->ready&&now()>=p->deadline){finishPending(p);xpc_connection_cancel(c);return;}
     if(!p->pending&&!p->ready){xpc_connection_cancel(c);return;}
     auto r=replyMessage(m);if(!r){finishPending(p);xpc_connection_cancel(c);return;}
@@ -295,7 +301,14 @@ void acceptPeer(xpc_connection_t c){
     auto op=string(m,"op");
     if(op=="prepareBuffers"&&schema(m,"prepareBuffers",{{"generation",XPC_TYPE_UINT64},{"uid",XPC_TYPE_STRING,1024},{"apply",XPC_TYPE_BOOL}})&&xpc_dictionary_get_uint64(m,"generation"))prepareBuffers(c,m,r);
     else if(op=="activate"&&schema(m,"activate",{{"generation",XPC_TYPE_UINT64},{"uid",XPC_TYPE_STRING,1024}})&&xpc_dictionary_get_uint64(m,"generation"))activate(c,m,r);
-    else if(op=="restore"&&sessionSchema(m,"restore")&&xpc_dictionary_get_uint64(m,"generation")==generation){reason=0;restorePeer=c;restoreResponse=r;restore();}
+    else if(op=="restore"&&sessionSchema(m,"restore")){
+      auto requested=xpc_dictionary_get_uint64(m,"generation");
+      if(generation&&requested==generation){reason=0;restorePeer=c;restoreResponse=r;restore();}
+      else if(!generation&&requested==lastGeneration){
+        if(settled)sendReply(c,r);
+        else{if(restorePeer)sendReply(restorePeer,restoreResponse,"Audio restoration was superseded.");restorePeer=c;restoreResponse=r;reconcile();}
+      }else{sendReply(c,r,"Invalid recovery operation or session.");xpc_connection_cancel(c);}
+    }
     else if(op=="status"&&sessionSchema(m,"status")){
       auto requested=xpc_dictionary_get_uint64(m,"generation");
       if(generation&&requested!=generation){sendReply(c,r,"Invalid or stale audio session.");return;}

@@ -39,12 +39,14 @@ int main(){@autoreleasepool{
   responses={status(),status(1,false)};check(0,false);
   responses={status(),status(2)};check(2,false);
   responses={status(),status(3)};check(3,false);
+  responses={status(),status(4)};check(4,false);
   responses={status(),XPC_ERROR_CONNECTION_INVALID};check(0,true);
   // Ended sessions read the recovery reason in either settlement ordering.
   responses={ended(),status(1,true)};check(0,true);
   responses={ended(),status(1,false)};check(0,false);
   responses={ended(),status(2)};check(2,false);
   responses={ended(),status(3)};check(3,false);
+  responses={ended(),status(4)};check(4,false);
   responses={ended(),status()};check(0,true); // retirement notification not processed yet
   auto inactive=status();xpc_dictionary_set_bool(inactive,"active",false);
   responses={ended(),inactive};check(0,true); // restored before the poll, no reason published yet
